@@ -1,0 +1,144 @@
+// ==============================================================================
+// Prisma Schema for Affiliate Product Discovery Platform
+// Target Database: MySQL 8.0+ (Hostinger VPS / Production Ready)
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  PARTNER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum ProductStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Platform {
+  AMAZON
+  FLIPKART
+  MEESHO
+}
+
+enum CategoryStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String     @db.VarChar(128)
+  email        String     @unique @db.VarChar(191)
+  mobile       String     @db.VarChar(20)
+  passwordHash String     @db.VarChar(255)
+  role         Role       @default(PARTNER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  // Relations
+  products       Product[]
+  passwordResets PasswordReset[]
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Category {
+  id        String         @id @default(uuid())
+  name      String         @db.VarChar(96)
+  slug      String         @unique @db.VarChar(96)
+  imageUrl  String?        @db.Text
+  status    CategoryStatus @default(ACTIVE)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  // Relations
+  products Product[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("categories")
+}
+
+model Product {
+  id             String        @id @default(uuid())
+  partnerId      String?       @db.VarChar(191)
+  categoryId     String        @db.VarChar(191)
+  platform       Platform
+  title          String        @db.VarChar(255)
+  slug           String        @unique @db.VarChar(255)
+  description    String        @db.Text
+  imageUrl       String        @db.Text
+  price          Decimal?      @db.Decimal(10, 2)
+  dealOffer      String?       @db.VarChar(128)
+  dealDetails    String?       @db.VarChar(255)
+  affiliateUrl   String        @db.Text
+  status         ProductStatus @default(PENDING)
+  isAdminProduct Boolean       @default(false)
+  featured       Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  partner   User?      @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  category  Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  clickLogs ClickLog[]
+
+  // Indexes optimized for affiliate discovery, public searches, and admin ordering
+  @@index([slug])
+  @@index([categoryId])
+  @@index([partnerId])
+  @@index([status])
+  @@index([platform])
+  @@index([createdAt])
+  @@index([isAdminProduct, featured, createdAt])
+  @@map("products")
+}
+
+model ClickLog {
+  id        BigInt   @id @default(autoincrement())
+  productId String   @db.VarChar(191)
+  ipHash    String?  @db.VarChar(64) // Privacy-conscious hashed IP
+  userAgent String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, createdAt])
+  @@map("click_logs")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String    @db.VarChar(191)
+  tokenHash String    @unique @db.VarChar(255)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
