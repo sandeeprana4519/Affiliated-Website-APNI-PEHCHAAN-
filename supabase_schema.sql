@@ -350,3 +350,31 @@ INSERT INTO public.products (id, partner_id, category_id, platform, title, slug,
     TRUE,
     119
   );
+-- SUPABASE ROW LEVEL SECURITY (RLS) PERMISSION FIX
+-- Run this in your Supabase SQL Editor (https://supabase.com/dashboard -> SQL Editor -> New Query -> Run)
+
+-- 1. FASTEST & EASIEST: Disable RLS for full read & write access
+ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.click_logs DISABLE ROW LEVEL SECURITY;
+
+-- 2. ALTERNATIVE: Keep RLS enabled with permissive policies
+DROP POLICY IF EXISTS "Public can view active categories" ON public.categories;
+DROP POLICY IF EXISTS "Public full access to categories" ON public.categories;
+CREATE POLICY "Public full access to categories"
+  ON public.categories FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can view approved products" ON public.products;
+DROP POLICY IF EXISTS "Public full access to products" ON public.products;
+CREATE POLICY "Public full access to products"
+  ON public.products FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public full access to users" ON public.users;
+CREATE POLICY "Public full access to users"
+  ON public.users FOR ALL TO public USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public can log affiliate clicks" ON public.click_logs;
+DROP POLICY IF EXISTS "Public full access to click_logs" ON public.click_logs;
+CREATE POLICY "Public full access to click_logs"
+  ON public.click_logs FOR ALL TO public USING (true) WITH CHECK (true);
