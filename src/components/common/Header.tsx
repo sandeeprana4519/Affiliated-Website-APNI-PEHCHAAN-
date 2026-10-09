@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { BrandLogo } from './BrandLogo';
 import { 
   Search, 
   Menu, 
@@ -45,13 +46,13 @@ export const Header: React.FC = () => {
           onClick={() => setCurrentView('home')}
           className="flex items-center gap-2 sm:gap-2.5 cursor-pointer group min-w-0 flex-1 sm:flex-initial"
         >
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 flex items-center justify-center shadow-md shadow-amber-500/10 group-hover:scale-105 transition-transform shrink-0">
-            <Compass className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-          </div>
+          <BrandLogo size={42} className="w-9 h-9 sm:w-10 sm:h-10 group-hover:scale-105 transition-transform" />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap leading-tight">
-              <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900">DealSphere</span>
-              <span className="text-[9px] sm:text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 leading-none whitespace-nowrap">
+              <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900">
+                <span className="text-amber-600">APNI</span> PEHCHAAN
+              </span>
+              <span className="text-[9px] sm:text-[10px] font-semibold tracking-wide uppercase px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-800 leading-none whitespace-nowrap">
                 Affiliate Discovery
               </span>
             </div>
@@ -126,14 +127,23 @@ export const Header: React.FC = () => {
                     setCurrentView('partner_dashboard');
                   }
                 }}
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-800 flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-semibold text-slate-800 flex items-center gap-2 transition-colors cursor-pointer"
               >
-                {currentUser.role === 'ADMIN' ? (
+                {currentUser.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.name}
+                    className="w-5 h-5 rounded-full object-cover border border-amber-300"
+                  />
+                ) : currentUser.role === 'ADMIN' ? (
                   <Shield className="w-3.5 h-3.5 text-purple-600" />
                 ) : (
                   <User className="w-3.5 h-3.5 text-amber-600" />
                 )}
-                <span>Dashboard</span>
+                <span className="max-w-[120px] truncate">{currentUser.name}</span>
+                <span className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-slate-200 text-slate-500 font-medium">
+                  {currentUser.role === 'ADMIN' ? 'Admin' : 'Partner'}
+                </span>
               </button>
 
               <button

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
+import { PartnerSettingsModal } from './PartnerSettingsModal';
 import { 
   Plus, 
   Trash2, 
-  Edit3
+  Edit3,
+  Settings
 } from 'lucide-react';
 
 export const PartnerDashboard: React.FC = () => {
@@ -17,6 +19,7 @@ export const PartnerDashboard: React.FC = () => {
     logout
   } = useApp();
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editPrice, setEditPrice] = useState<string>('');
   const [editTitle, setEditTitle] = useState<string>('');
@@ -71,13 +74,21 @@ export const PartnerDashboard: React.FC = () => {
     <div className="max-w-7xl mx-auto px-3.5 sm:px-4 py-6 sm:py-8 space-y-6 w-full">
       {/* Header (Requirement 9 & 11) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm w-full">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 font-extrabold text-lg shadow-xs shrink-0">
-            {currentUser.name.charAt(0)}
-          </div>
+        <div className="flex items-center gap-3.5 min-w-0">
+          {currentUser.avatarUrl ? (
+            <img
+              src={currentUser.avatarUrl}
+              alt={currentUser.name}
+              className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-300 shadow-xs shrink-0"
+            />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 font-extrabold text-xl shadow-xs shrink-0">
+              {currentUser.name.charAt(0)}
+            </div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">Partner Dashboard</h1>
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{currentUser.name}</h1>
               <span className={`text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md border font-semibold ${
                 currentUser.status === 'ACTIVE'
                   ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
@@ -85,14 +96,29 @@ export const PartnerDashboard: React.FC = () => {
               }`}>
                 {currentUser.status}
               </span>
+              <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-semibold">
+                Partner Portal
+              </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5 break-words">
-              Logged in as <strong className="text-slate-800">{currentUser.name}</strong> ({currentUser.email}) · Partner ID: <span className="text-slate-600 font-medium break-all">{currentUser.id}</span>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Login ID / Email: <strong className="text-slate-800">{currentUser.email}</strong>
+            </p>
+            <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>Partner ID:</span>
+              <span className="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 text-[10px] break-all select-all">{currentUser.id}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 shadow-2xs"
+            title="Edit Partner Settings (Name, Photo, ID, Password)"
+          >
+            <Settings className="w-4 h-4 text-amber-600" />
+            <span>Settings</span>
+          </button>
           <button
             onClick={() => setCurrentView('partner_add_product')}
             className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
@@ -134,88 +160,157 @@ export const PartnerDashboard: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
-                <tr>
-                  <th className="p-3">Product</th>
-                  <th className="p-3">Platform</th>
-                  <th className="p-3">Category</th>
-                  <th className="p-3">Price</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Submitted</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {myProducts.map((prod) => (
-                  <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="p-3 font-medium text-slate-900 flex items-center gap-3">
-                      <img
-                        src={prod.imageUrl}
-                        alt={prod.title}
-                        className="w-10 h-10 rounded-lg object-cover bg-slate-50 border border-slate-200 shrink-0"
-                      />
-                      <div className="min-w-0 max-w-xs">
-                        <span className="font-semibold block truncate text-slate-800">{prod.title}</span>
-                        <span className="text-xs text-slate-400 truncate block">
-                          ID: {prod.id} · Clicks: {prod.clickCount}
+          <div>
+            {/* Mobile Cards View (Visible on screens < 640px) */}
+            <div className="sm:hidden divide-y divide-slate-100">
+              {myProducts.map((prod) => (
+                <div key={prod.id} className="p-4 space-y-3 bg-white">
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={prod.imageUrl}
+                      alt={prod.title}
+                      className="w-16 h-16 rounded-xl object-cover bg-slate-50 border border-slate-200 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-700 text-[10px] font-bold">
+                          {prod.platform}
                         </span>
-                      </div>
-                    </td>
-
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-700 text-xs font-semibold">
-                        {prod.platform}
-                      </span>
-                    </td>
-
-                    <td className="p-3 text-slate-600 font-medium">{prod.categoryName}</td>
-
-                    <td className="p-3 font-bold text-slate-900">
-                      {prod.price ? `₹${prod.price.toLocaleString('en-IN')}` : '—'}
-                    </td>
-
-                    <td className="p-3">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${
+                        <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${
                           prod.status === 'APPROVED'
                             ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                             : prod.status === 'PENDING'
                             ? 'bg-amber-50 border-amber-200 text-amber-700'
                             : 'bg-rose-50 border-rose-200 text-rose-700'
-                        }`}
-                      >
-                        {prod.status}
-                      </span>
-                    </td>
-
-                    <td className="p-3 text-slate-500 text-xs">
-                      {new Date(prod.createdAt).toLocaleDateString()}
-                    </td>
-
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenEdit(prod)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer border border-slate-200/60"
-                          title="Edit Product"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(prod)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer border border-slate-200/60"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        }`}>
+                          {prod.status}
+                        </span>
                       </div>
-                    </td>
+                      <h4 className="font-semibold text-xs text-slate-900 mt-1 line-clamp-2 leading-snug">
+                        {prod.title}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Category: <strong className="text-slate-700">{prod.categoryName}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <div>
+                      <span className="text-[11px] text-slate-400">Price: </span>
+                      <span className="font-bold text-slate-900 text-sm">
+                        {prod.price ? `₹${prod.price.toLocaleString('en-IN')}` : '—'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        Submitted: {new Date(prod.createdAt).toLocaleDateString()} · {prod.clickCount} clicks
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEdit(prod)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1 border border-slate-200 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(prod)}
+                        className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 border border-slate-200 cursor-pointer"
+                        title="Delete Product"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View (Visible on screens >= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[700px]">
+                <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 whitespace-nowrap">
+                  <tr>
+                    <th className="p-3">Product</th>
+                    <th className="p-3 whitespace-nowrap">Platform</th>
+                    <th className="p-3 whitespace-nowrap">Category</th>
+                    <th className="p-3 whitespace-nowrap">Price</th>
+                    <th className="p-3 whitespace-nowrap">Status</th>
+                    <th className="p-3 whitespace-nowrap">Submitted</th>
+                    <th className="p-3 whitespace-nowrap text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {myProducts.map((prod) => (
+                    <tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3 font-medium text-slate-900 flex items-center gap-3">
+                        <img
+                          src={prod.imageUrl}
+                          alt={prod.title}
+                          className="w-10 h-10 rounded-lg object-cover bg-slate-50 border border-slate-200 shrink-0"
+                        />
+                        <div className="min-w-0 max-w-xs">
+                          <span className="font-semibold block truncate text-slate-800">{prod.title}</span>
+                          <span className="text-xs text-slate-400 truncate block">
+                            ID: {prod.id} · Clicks: {prod.clickCount}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-3 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-slate-700 text-xs font-semibold">
+                          {prod.platform}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-slate-600 font-medium whitespace-nowrap">{prod.categoryName}</td>
+
+                      <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                        {prod.price ? `₹${prod.price.toLocaleString('en-IN')}` : '—'}
+                      </td>
+
+                      <td className="p-3 whitespace-nowrap">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${
+                            prod.status === 'APPROVED'
+                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                              : prod.status === 'PENDING'
+                              ? 'bg-amber-50 border-amber-200 text-amber-700'
+                              : 'bg-rose-50 border-rose-200 text-rose-700'
+                          }`}
+                        >
+                          {prod.status}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-slate-500 text-xs whitespace-nowrap">
+                        {new Date(prod.createdAt).toLocaleDateString()}
+                      </td>
+
+                      <td className="p-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(prod)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer border border-slate-200/60"
+                            title="Edit Product"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(prod)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer border border-slate-200/60"
+                            title="Delete Product"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -295,6 +390,14 @@ export const PartnerDashboard: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Partner Settings Modal */}
+      {isSettingsOpen && (
+        <PartnerSettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+        />
       )}
     </div>
   );

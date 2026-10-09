@@ -12,6 +12,7 @@ export interface User {
   passwordHash: string;
   role: Role;
   status: UserStatus;
+  avatarUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

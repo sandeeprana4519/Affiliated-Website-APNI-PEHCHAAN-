@@ -1,0 +1,314 @@
+<svg width="400" height="400" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Rich 3D Warm Gold Metallic Gradients -->
+    <linearGradient id="apGoldLight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFBEB" />
+      <stop offset="20%" stop-color="#FDE047" />
+      <stop offset="45%" stop-color="#F59E0B" />
+      <stop offset="70%" stop-color="#D97706" />
+      <stop offset="90%" stop-color="#B45309" />
+      <stop offset="100%" stop-color="#78350F" />
+    </linearGradient>
+
+    <linearGradient id="apGoldBright" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="15%" stop-color="#FEF08A" />
+      <stop offset="40%" stop-color="#FBBF24" />
+      <stop offset="70%" stop-color="#F59E0B" />
+      <stop offset="90%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#92400E" />
+    </linearGradient>
+
+    <linearGradient id="apGoldReflect" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#92400E" />
+      <stop offset="30%" stop-color="#D97706" />
+      <stop offset="60%" stop-color="#FCD34D" />
+      <stop offset="85%" stop-color="#FFFBEB" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+
+    <!-- Glossy Obsidian Black Gradients -->
+    <linearGradient id="apBlackFacetDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#374151" />
+      <stop offset="30%" stop-color="#1F2937" />
+      <stop offset="70%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+
+    <linearGradient id="apBlackFacetLight" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#6B7280" />
+      <stop offset="25%" stop-color="#4B5563" />
+      <stop offset="60%" stop-color="#1F2937" />
+      <stop offset="100%" stop-color="#0B0F17" />
+    </linearGradient>
+
+    <!-- Chrome Rim Gradients -->
+    <linearGradient id="apGoldRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FEF08A" />
+      <stop offset="25%" stop-color="#F59E0B" />
+      <stop offset="50%" stop-color="#FFFFFF" />
+      <stop offset="75%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#78350F" />
+    </linearGradient>
+
+    <!-- Dark Carbon Radial Background -->
+    <radialGradient id="apBadgeBg" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#1E222D" />
+      <stop offset="50%" stop-color="#111319" />
+      <stop offset="100%" stop-color="#07080B" />
+    </radialGradient>
+
+    <!-- Gold Head Sphere 3D Radial Gradient -->
+    <radialGradient id="apGoldHeadSphere" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="30%" stop-color="#FDE047" />
+      <stop offset="65%" stop-color="#F59E0B" />
+      <stop offset="90%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#78350F" />
+    </radialGradient>
+
+    <!-- 3D Shadow Filters -->
+    <filter id="apShadow3D" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="3.5" flood-color="#000000" flood-opacity="0.75" />
+    </filter>
+
+    <filter id="apGoldGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Circular Outer Badge Background with Gold & Obsidian Ring -->
+  <circle cx="100" cy="100" r="95" fill="url(#apBadgeBg)" />
+  
+  <!-- Outer Gold Rim Accent -->
+  <circle cx="100" cy="100" r="94" stroke="url(#apGoldRim)" stroke-width="2.5" fill="none" opacity="0.9" />
+  <circle cx="100" cy="100" r="91" stroke="#F59E0B" stroke-width="0.75" stroke-dasharray="2 3" fill="none" opacity="0.4" />
+
+  <!-- 3D Monogram Group -->
+  <g filter="url(#apShadow3D)">
+    
+    <!-- ============================================== -->
+    <!-- LETTER 'A' (Deep Obsidian Black 3D Beveled Stem) -->
+    <!-- ============================================== -->
+    
+    <!-- 'A' Left Outer Leg / Bevel Facet A (Light Slate/Graphite) -->
+    <path
+      d="M 52 38
+         L 64 38
+         L 37 122
+         L 24 122
+         Z"
+      fill="url(#apBlackFacetLight)"
+    />
+    
+    <!-- 'A' Left Inner Leg / Bevel Facet B (Dark Noir Charcoal) -->
+    <path
+      d="M 64 38
+         L 72 38
+         L 47 122
+         L 37 122
+         Z"
+      fill="url(#apBlackFacetDark)"
+    />
+
+    <!-- 'A' Specular Glint along Spine -->
+    <path
+      d="M 64 38 L 37 122"
+      stroke="#9CA3AF"
+      stroke-width="1"
+      stroke-linecap="round"
+      opacity="0.8"
+    />
+
+    <!-- ============================================== -->
+    <!-- LETTER 'P' (3D Metallic Gold)                  -->
+    <!-- ============================================== -->
+    
+    <!-- 'P' Vertical Stem (Gold Bevel - Main Pillar) -->
+    <path
+      d="M 88 38
+         L 100 38
+         L 100 122
+         L 88 122
+         Z"
+      fill="url(#apGoldBright)"
+    />
+
+    <!-- 'P' Stem Shadow / Inset Facet -->
+    <path
+      d="M 88 38
+         L 92 38
+         L 92 122
+         L 88 122
+         Z"
+      fill="url(#apGoldReflect)"
+      opacity="0.85"
+    />
+
+    <!-- 'P' Stem Specular Highlight -->
+    <line
+      x1="93"
+      y1="38"
+      x2="93"
+      y2="122"
+      stroke="#FFFBEB"
+      stroke-width="1"
+      opacity="0.9"
+    />
+
+    <!-- 'P' Outer Bold Curved Loop (3D Gold) -->
+    <path
+      d="M 98 38
+         L 132 38
+         C 156 38, 172 52, 172 74
+         C 172 96, 154 110, 130 110
+         L 98 110
+         L 98 94
+         L 128 94
+         C 142 94, 154 85, 154 74
+         C 154 63, 142 54, 128 54
+         L 98 54
+         Z"
+      fill="url(#apGoldLight)"
+    />
+
+    <!-- 'P' Loop Upper Bevel Highlight -->
+    <path
+      d="M 98 38
+         L 132 38
+         C 155 38, 171 52, 171 74
+         L 165 74
+         C 165 55, 150 43, 130 43
+         L 98 43
+         Z"
+      fill="url(#apGoldBright)"
+      opacity="0.9"
+    />
+
+    <!-- 'P' Loop Specular Edge Gleam -->
+    <path
+      d="M 100 39 C 128 39, 169 44, 169 74"
+      stroke="#FFFFFF"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      fill="none"
+      opacity="0.9"
+    />
+
+    <!-- ============================================== -->
+    <!-- DYNAMIC GOLD HUMAN FIGURE (Celebration / Pehchaan) -->
+    <!-- Connects 'A' and 'P', forms crossbar & dynamism -->
+    <!-- ============================================== -->
+    
+    <!-- Golden Head Sphere (Celebrant / Victor) -->
+    <circle
+      cx="80"
+      cy="28"
+      r="8.5"
+      fill="url(#apGoldHeadSphere)"
+      filter="url(#apGoldGlow)"
+    />
+    
+    <!-- Golden Head Specular Glint -->
+    <circle
+      cx="77.5"
+      cy="25.5"
+      r="2.5"
+      fill="#FFFFFF"
+      opacity="0.85"
+    />
+
+    <!-- Dynamic Leaping Body & Raised Arms (Pure 3D Gold) -->
+    <!-- Left Arm reaches dynamically toward 'A' -->
+    <!-- Right Arm arches into the loop of 'P' -->
+    <!-- Torso swoops downward connecting across A and P -->
+    <path
+      d="M 80 38
+         C 82 45, 84 54, 80 66
+         C 75 79, 64 88, 48 94
+         C 38 97, 28 98, 20 98
+         C 28 94, 40 90, 52 82
+         C 63 74, 69 64, 71 54
+         C 72 48, 73 42, 75 38
+         Z"
+      fill="url(#apGoldBright)"
+    />
+
+    <!-- Golden Crossbar / Dynamic Swoosh Connecting Leg of 'A' -->
+    <path
+      d="M 40 84
+         C 58 78, 76 74, 98 74
+         L 98 84
+         C 78 84, 60 88, 40 94
+         Z"
+      fill="url(#apGoldLight)"
+    />
+
+    <!-- Golden Figure Celebratory Left Wing / Arm -->
+    <path
+      d="M 77 39
+         C 68 40, 58 45, 50 54
+         C 55 50, 64 47, 74 46
+         Z"
+      fill="url(#apGoldReflect)"
+    />
+
+    <!-- Golden Figure Dynamic Right Uplift Arm -->
+    <path
+      d="M 83 39
+         C 92 41, 102 46, 110 56
+         C 104 50, 96 46, 85 45
+         Z"
+      fill="url(#apGoldBright)"
+    />
+
+    <!-- High-gloss Gold Accent Swoosh / Star Flare -->
+    <path
+      d="M 80 20 L 81.5 25 L 86 26.5 L 81.5 28 L 80 33 L 78.5 28 L 74 26.5 L 78.5 25 Z"
+      fill="#FFFBEB"
+      opacity="0.7"
+    />
+
+  </g>
+
+  <!-- Bottom Brand Typography (APNI PEHCHAAN) on Emblem -->
+  <!-- Subtle arc divider line -->
+  <path
+    d="M 45 142 Q 100 152 155 142"
+    stroke="url(#apGoldRim)"
+    stroke-width="1.2"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.7"
+  />
+
+  <!-- APNI PEHCHAAN Text in Luxury 3D Gold -->
+  <text
+    x="100"
+    y="164"
+    text-anchor="middle"
+    font-family="'Montserrat', 'Arial Black', sans-serif"
+    font-size="14.5"
+    font-weight="900"
+    letter-spacing="2.8"
+    fill="url(#apGoldBright)"
+  >
+    APNI PEHCHAAN
+  </text>
+
+  <!-- Tagline underneath -->
+  <text
+    x="100"
+    y="178"
+    text-anchor="middle"
+    font-family="'Inter', sans-serif"
+    font-size="6.5"
+    font-weight="600"
+    letter-spacing="2"
+    fill="#E2E8F0"
+    opacity="0.85"
+  >
+    AFFILIATE PRODUCT DISCOVERY
+  </text>
+</svg>

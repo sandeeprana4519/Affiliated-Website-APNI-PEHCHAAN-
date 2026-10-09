@@ -40,18 +40,21 @@ export const PartnerLogin: React.FC = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block text-slate-600 mb-1 font-medium">Partner Email Address</label>
+            <label className="block text-slate-600 mb-1 font-medium">Partner Email Address or Partner ID</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="partner@yourdealbrand.com"
+                placeholder="partner@example.com or Partner ID (e.g. AP00001)"
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
               />
             </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              You can log in using either your registered email address or your Partner ID (e.g. <strong>AP00001</strong>).
+            </p>
           </div>
 
           <div>
@@ -99,21 +102,27 @@ export const PartnerLogin: React.FC = () => {
 
       {/* Preset quick test login buttons */}
       <div className="p-3.5 bg-slate-100/70 rounded-2xl border border-slate-200/80 text-xs text-slate-600 space-y-2">
-        <span className="text-xs text-slate-500 block uppercase font-semibold tracking-wide">Quick Testing Logins:</span>
+        <span className="text-xs text-slate-500 block uppercase font-semibold tracking-wide">Quick Testing Logins (Email or ID):</span>
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => setEmail('kavita@partnerdeals.in')}
+            onClick={() => {
+              setEmail('AP00001');
+              setPassword('••••••••');
+            }}
             className="p-2 rounded-xl bg-white border border-slate-200 hover:border-amber-500/50 hover:bg-slate-50 text-left cursor-pointer transition-colors shadow-xs"
           >
-            <p className="text-amber-800 text-xs font-bold">Partner 25</p>
-            <p className="text-[11px] text-slate-500 truncate">kavita@partnerdeals.in</p>
+            <p className="text-amber-800 text-xs font-bold">Partner 25 (AP00001)</p>
+            <p className="text-[11px] text-slate-500 truncate">ID: AP00001 · Kavita</p>
           </button>
           <button
-            onClick={() => setEmail('rahul@techhunter.io')}
+            onClick={() => {
+              setEmail('AP00002');
+              setPassword('••••••••');
+            }}
             className="p-2 rounded-xl bg-white border border-slate-200 hover:border-amber-500/50 hover:bg-slate-50 text-left cursor-pointer transition-colors shadow-xs"
           >
-            <p className="text-amber-800 text-xs font-bold">Partner 40</p>
-            <p className="text-[11px] text-slate-500 truncate">rahul@techhunter.io</p>
+            <p className="text-amber-800 text-xs font-bold">Partner 40 (AP00002)</p>
+            <p className="text-[11px] text-slate-500 truncate">ID: AP00002 · Rahul</p>
           </button>
         </div>
       </div>

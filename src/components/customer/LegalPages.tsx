@@ -34,22 +34,22 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
 
             <div className="space-y-3">
               <p>
-                <strong className="text-slate-800">DealSphere</strong> is a standalone product discovery platform designed to help users identify value deals, seasonal promotions, and curated products across external verified online merchants, including Amazon, Flipkart, and Meesho.
+                <strong className="text-slate-800">APNI PEHCHAAN</strong> is a standalone product discovery platform designed to help users identify value deals, seasonal promotions, and curated products across external verified online merchants, including Amazon, Flipkart, and Meesho.
               </p>
 
               <h3 className="text-sm font-bold text-slate-900 pt-2">How Our Affiliate Relationships Work</h3>
               <p>
-                When you click on the "Buy Now" button on any product card or detail page on DealSphere, you are redirected to the corresponding merchant's official website via an affiliate tracking link. If you decide to make a qualifying purchase on that external platform, we may receive a small referral commission from the retailer at <strong className="text-slate-800">no additional cost to you</strong>.
+                When you click on the "Buy Now" button on any product card or detail page on APNI PEHCHAAN, you are redirected to the corresponding merchant's official website via an affiliate tracking link. If you decide to make a qualifying purchase on that external platform, we may receive a small referral commission from the retailer at <strong className="text-slate-800">no additional cost to you</strong>.
               </p>
 
               <h3 className="text-sm font-bold text-slate-900 pt-2">Zero Payment & Non-Merchant Notice</h3>
               <p>
-                DealSphere is not an e-commerce store. We do not sell items directly, process credit cards or UPI payments, store buyer payment details, manage inventories, or ship packages. All purchases, returns, warranty claims, and customer service inquiries must be directed to the respective merchant (Amazon, Flipkart, or Meesho) where the order was placed.
+                APNI PEHCHAAN is not an e-commerce store. We do not sell items directly, process credit cards or UPI payments, store buyer payment details, manage inventories, or ship packages. All purchases, returns, warranty claims, and customer service inquiries must be directed to the respective merchant (Amazon, Flipkart, or Meesho) where the order was placed.
               </p>
 
               <h3 className="text-sm font-bold text-slate-900 pt-2">Pricing & Availability Disclaimer</h3>
               <p>
-                Prices and promotional offers displayed on DealSphere are accurate at the time of publication but are subject to frequent change by external retailers without prior notice. Please verify final prices and availability directly on the seller's website before completing your transaction.
+                Prices and promotional offers displayed on APNI PEHCHAAN are accurate at the time of publication but are subject to frequent change by external retailers without prior notice. Please verify final prices and availability directly on the seller's website before completing your transaction.
               </p>
             </div>
           </div>
@@ -69,7 +69,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
 
             <div className="space-y-3">
               <p>
-                We value your privacy. As a product discovery platform, DealSphere is built with privacy-first principles. We do not require customer registration to browse, search, or click through to deals.
+                We value your privacy. As a product discovery platform, APNI PEHCHAAN is built with privacy-first principles. We do not require customer registration to browse, search, or click through to deals.
               </p>
 
               <h3 className="text-sm font-bold text-slate-900 pt-2">Information We Do Not Collect</h3>
@@ -93,13 +93,13 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               </div>
               <div className="min-w-0">
                 <h1 className="text-lg sm:text-xl font-bold text-slate-900 break-words">Terms & Conditions of Service</h1>
-                <p className="text-xs text-slate-500">Terms governing usage of DealSphere</p>
+                <p className="text-xs text-slate-500">Terms governing usage of APNI PEHCHAAN</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <p>
-                By accessing DealSphere, you agree to these Terms. If you do not agree, please discontinue using this website.
+                By accessing APNI PEHCHAAN, you agree to these Terms. If you do not agree, please discontinue using this website.
               </p>
               <h3 className="text-sm font-bold text-slate-900 pt-2">Platform Use</h3>
               <p>
@@ -125,7 +125,7 @@ export const LegalPages: React.FC<LegalPagesProps> = ({ page }) => {
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
                 <h4 className="font-semibold text-slate-900 text-xs">Why can't I add items to a cart or checkout here?</h4>
                 <p className="text-slate-600 text-xs">
-                  DealSphere is an affiliate discovery portal, not a seller. You complete all transactions directly on Amazon, Flipkart, or Meesho, giving you their official security, order tracking, and customer support.
+                  APNI PEHCHAAN is an affiliate discovery portal, not a seller. You complete all transactions directly on Amazon, Flipkart, or Meesho, giving you their official security, order tracking, and customer support.
                 </p>
               </div>
 

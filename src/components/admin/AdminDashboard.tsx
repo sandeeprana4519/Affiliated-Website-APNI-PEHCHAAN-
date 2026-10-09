@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, Platform, Category, User, ProductStatus } from '../../types';
-import { normalizeSupabaseUrl } from '../../lib/supabase';
+import { normalizeSupabaseUrl, getViteEnvStatus } from '../../lib/supabase';
 import { 
   Shield, 
   Users, 
@@ -101,12 +101,19 @@ export const AdminDashboard: React.FC = () => {
   const [partnerSearch, setPartnerSearch] = useState('');
 
   // Database Connection states
-  const [dbUrl, setDbUrl] = useState(supabaseConfig.url || '');
+  const envStatus = getViteEnvStatus();
+  const [dbUrl, setDbUrl] = useState(supabaseConfig.url || envStatus.url || '');
   const [dbKey, setDbKey] = useState(supabaseConfig.anonKey || '');
   const [isTestingDb, setIsTestingDb] = useState(false);
   const [isPushingDb, setIsPushingDb] = useState(false);
   const [copiedRlsSql, setCopiedRlsSql] = useState(false);
-  const [dbTestResult, setDbTestResult] = useState<{ success: boolean; message: string; rlsWarning?: boolean; tableCounts?: { categories: number; products: number; users: number } } | null>(null);
+  const [dbTestResult, setDbTestResult] = useState<{ 
+    success: boolean; 
+    message: string; 
+    rlsWarning?: boolean; 
+    tableCounts?: { categories: number; products: number; users: number; clickLogs?: number };
+    permissions?: { categories: string; products: string; users: string; clickLogs: string };
+  } | null>(null);
 
   const RLS_FIX_SQL = `-- SUPABASE ROW LEVEL SECURITY (RLS) PERMISSION FIX
 -- Run this in your Supabase SQL Editor (https://supabase.com/dashboard -> SQL Editor -> New Query -> Run)
@@ -770,16 +777,111 @@ CREATE POLICY "Public full access to click_logs"
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800">
+            {/* Mobile Cards View (Visible on screens < 640px) */}
+            <div className="sm:hidden divide-y divide-zinc-800/80">
+              {filteredProducts.map((p) => (
+                <div key={p.id} className="p-4 space-y-3 bg-zinc-900/60">
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={p.imageUrl}
+                      alt={p.title}
+                      className="w-16 h-16 rounded-lg object-cover bg-zinc-950 border border-zinc-800 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] font-bold">
+                          {p.platform}
+                        </span>
+                        {p.isAdminProduct ? (
+                          <span className="text-purple-400 font-semibold bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/20 text-[10px]">
+                            Admin
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400 text-[10px] truncate max-w-[100px]">
+                            {p.partnerName || 'Partner'}
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                          p.status === 'APPROVED'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                            : p.status === 'PENDING'
+                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                        }`}>
+                          {p.status === 'REJECTED' ? 'HIDDEN' : p.status}
+                        </span>
+                      </div>
+                      <h4 className="font-semibold text-xs text-white mt-1 line-clamp-2 leading-snug">
+                        {p.title}
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {p.categoryName} {p.featured && '· ★ Featured'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-xs">
+                    <div>
+                      <span className="text-[11px] text-zinc-500">Price: </span>
+                      <span className="font-bold text-white text-sm">
+                        {p.price ? `₹${p.price.toLocaleString('en-IN')}` : '—'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => openEditProduct(p)}
+                        className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => adminToggleHideProduct(p.id)}
+                        className={`px-2.5 py-1.5 rounded text-xs font-medium flex items-center gap-1 cursor-pointer border ${
+                          p.status === 'APPROVED'
+                            ? 'bg-amber-950/40 text-amber-300 border-amber-800/60'
+                            : 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60'
+                        }`}
+                      >
+                        {p.status === 'APPROVED' ? (
+                          <>
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>Hide</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Unhide</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'product', id: p.id, name: p.title })}
+                        className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 rounded border border-transparent hover:border-rose-900 cursor-pointer"
+                        title="Delete Product"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View (Visible on screens >= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[760px]">
+                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800 whitespace-nowrap">
                   <tr>
-                    <th className="p-3">Product</th>
-                    <th className="p-3">Owner / Partner</th>
-                    <th className="p-3">Platform</th>
-                    <th className="p-3">Price</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions (Edit / Hide / Delete)</th>
+                    <th className="p-3 whitespace-nowrap">Product</th>
+                    <th className="p-3 whitespace-nowrap">Owner / Partner</th>
+                    <th className="p-3 whitespace-nowrap">Platform</th>
+                    <th className="p-3 whitespace-nowrap">Price</th>
+                    <th className="p-3 whitespace-nowrap">Status</th>
+                    <th className="p-3 whitespace-nowrap text-right">Actions (Edit / Hide / Delete)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
@@ -799,7 +901,7 @@ CREATE POLICY "Public full access to click_logs"
                         </div>
                       </td>
 
-                      <td className="p-3 text-zinc-300">
+                      <td className="p-3 text-zinc-300 whitespace-nowrap">
                         {p.isAdminProduct ? (
                           <span className="text-purple-400 font-semibold font-mono bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 text-[10px]">
                             Editorial (Admin)
@@ -809,17 +911,17 @@ CREATE POLICY "Public full access to click_logs"
                         )}
                       </td>
 
-                      <td className="p-3 font-mono">
+                      <td className="p-3 font-mono whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px]">
                           {p.platform}
                         </span>
                       </td>
 
-                      <td className="p-3 font-mono font-bold text-white">
+                      <td className="p-3 font-mono font-bold text-white whitespace-nowrap">
                         {p.price ? `₹${p.price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
-                      <td className="p-3">
+                      <td className="p-3 whitespace-nowrap">
                         <span
                           className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
                             p.status === 'APPROVED'
@@ -833,12 +935,12 @@ CREATE POLICY "Public full access to click_logs"
                         </span>
                       </td>
 
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="p-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                           {/* Edit button */}
                           <button
                             onClick={() => openEditProduct(p)}
-                            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap"
                             title="Edit Product Details"
                           >
                             <Edit3 className="w-3 h-3 text-blue-400" />
@@ -848,7 +950,7 @@ CREATE POLICY "Public full access to click_logs"
                           {/* Hide / Unhide Toggle */}
                           <button
                             onClick={() => adminToggleHideProduct(p.id)}
-                            className={`px-2.5 py-1.5 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer border ${
+                            className={`px-2.5 py-1.5 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer border whitespace-nowrap ${
                               p.status === 'APPROVED'
                                 ? 'bg-amber-950/40 text-amber-300 border-amber-800/60 hover:bg-amber-900/50'
                                 : 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/50'
@@ -910,15 +1012,87 @@ CREATE POLICY "Public full access to click_logs"
           </div>
 
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800">
+            {/* Mobile Cards View (Visible on screens < 640px) */}
+            <div className="sm:hidden divide-y divide-zinc-800/80">
+              {filteredPartners.map((partner) => {
+                const partnerProds = products.filter((p) => p.partnerId === partner.id);
+                const partnerClicks = partnerProds.reduce((sum, p) => sum + (p.clickCount || 0), 0);
+
+                return (
+                  <div key={partner.id} className="p-4 space-y-3 bg-zinc-900/60">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-sm text-white">{partner.name}</span>
+                      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
+                        partner.status === 'ACTIVE'
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                          : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                      }`}>
+                        {partner.status}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1 text-zinc-400">
+                      <div>Email: <span className="text-zinc-200">{partner.email}</span></div>
+                      <div>Phone: <span className="text-zinc-200">{partner.mobile}</span></div>
+                      <div>Catalog: <strong className="text-white">{partnerProds.length} products</strong> ({partnerClicks} clicks)</div>
+                      <div className="text-[10px] text-zinc-500 font-mono break-all">ID: {partner.id}</div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-zinc-800/80 text-xs">
+                      <button
+                        onClick={() => {
+                          setSelectedPartnerDetails(partner);
+                          setShowPasswordHash(false);
+                        }}
+                        className="flex-1 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-xs font-medium flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Details</span>
+                      </button>
+
+                      <button
+                        onClick={() => openEditPartner(partner)}
+                        className="flex-1 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-xs font-medium flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => toggleBlockPartner(partner.id)}
+                        className={`px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1 cursor-pointer border ${
+                          partner.status === 'ACTIVE'
+                            ? 'bg-rose-950/40 text-rose-200 border-rose-800'
+                            : 'bg-emerald-950/40 text-emerald-200 border-emerald-800'
+                        }`}
+                      >
+                        {partner.status === 'ACTIVE' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                        <span>{partner.status === 'ACTIVE' ? 'Block' : 'Activate'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'partner', id: partner.id, name: partner.name })}
+                        className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 rounded border border-transparent hover:border-rose-900 cursor-pointer"
+                        title="Delete Partner Account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View (Visible on screens >= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[720px]">
+                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800 whitespace-nowrap">
                   <tr>
-                    <th className="p-3">Partner Name & ID</th>
-                    <th className="p-3">Email & Contact</th>
-                    <th className="p-3">Products</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions (Details, Edit, Block, Delete)</th>
+                    <th className="p-3 whitespace-nowrap">Partner Name & ID</th>
+                    <th className="p-3 whitespace-nowrap">Email & Contact</th>
+                    <th className="p-3 whitespace-nowrap">Products</th>
+                    <th className="p-3 whitespace-nowrap">Status</th>
+                    <th className="p-3 whitespace-nowrap text-right">Actions (Details, Edit, Block, Delete)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
@@ -928,7 +1102,7 @@ CREATE POLICY "Public full access to click_logs"
 
                     return (
                       <tr key={partner.id} className="hover:bg-zinc-900/60 transition-colors">
-                        <td className="p-3 font-semibold text-white">
+                        <td className="p-3 font-semibold text-white whitespace-nowrap">
                           <div>
                             <span className="text-zinc-100">{partner.name}</span>
                             <span className="text-[10px] text-zinc-500 font-mono block">
@@ -937,19 +1111,19 @@ CREATE POLICY "Public full access to click_logs"
                           </div>
                         </td>
 
-                        <td className="p-3 font-mono text-zinc-300">
+                        <td className="p-3 font-mono text-zinc-300 whitespace-nowrap">
                           <div>
                             <span className="text-zinc-200">{partner.email}</span>
                             <span className="text-[10px] text-zinc-500 block">{partner.mobile}</span>
                           </div>
                         </td>
 
-                        <td className="p-3 font-mono">
+                        <td className="p-3 font-mono whitespace-nowrap">
                           <span className="text-white font-semibold">{partnerProds.length}</span>
                           <span className="text-zinc-500 text-[10px] block">({partnerClicks} clicks)</span>
                         </td>
 
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
                             className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
                               partner.status === 'ACTIVE'
@@ -961,15 +1135,15 @@ CREATE POLICY "Public full access to click_logs"
                           </span>
                         </td>
 
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                             {/* View Full Details Modal */}
                             <button
                               onClick={() => {
                                 setSelectedPartnerDetails(partner);
                                 setShowPasswordHash(false);
                               }}
-                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap"
                               title="View Full Credentials & Statistics"
                             >
                               <Eye className="w-3 h-3 text-amber-400" />
@@ -979,7 +1153,7 @@ CREATE POLICY "Public full access to click_logs"
                             {/* Edit Partner */}
                             <button
                               onClick={() => openEditPartner(partner)}
-                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap"
                               title="Edit Partner Name, Email, Password"
                             >
                               <Edit3 className="w-3 h-3 text-blue-400" />
@@ -989,7 +1163,7 @@ CREATE POLICY "Public full access to click_logs"
                             {/* Block / Unblock Toggle */}
                             <button
                               onClick={() => toggleBlockPartner(partner.id)}
-                              className={`px-2.5 py-1.5 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer border ${
+                              className={`px-2.5 py-1.5 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer border whitespace-nowrap ${
                                 partner.status === 'ACTIVE'
                                   ? 'bg-rose-950/40 text-rose-200 border-rose-800 hover:bg-rose-900/60'
                                   : 'bg-emerald-950/40 text-emerald-200 border-emerald-800 hover:bg-emerald-900/60'
@@ -1140,15 +1314,66 @@ CREATE POLICY "Public full access to click_logs"
 
           {/* Categories List Table */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800">
+            {/* Mobile Cards View (Visible on screens < 640px) */}
+            <div className="sm:hidden divide-y divide-zinc-800/80">
+              {categories.map((cat) => {
+                const catProdCount = products.filter((p) => p.categoryId === cat.id).length;
+
+                return (
+                  <div key={cat.id} className="p-4 space-y-3 bg-zinc-900/60">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={cat.imageUrl || PRESET_CATEGORY_IMAGES[0].url}
+                        alt={cat.name}
+                        className="w-12 h-12 rounded-lg object-cover bg-zinc-950 border border-zinc-800 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-white text-sm truncate">{cat.name}</h4>
+                          <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border shrink-0 ${
+                            cat.status === 'ACTIVE'
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                              : 'bg-zinc-800 text-zinc-500'
+                          }`}>
+                            {cat.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 font-mono mt-0.5 truncate">/category/{cat.slug}</p>
+                        <p className="text-xs text-zinc-300 font-medium mt-0.5">{catProdCount} Deals</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+                      <button
+                        onClick={() => openEditCategory(cat)}
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-xs font-medium flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'category', id: cat.id, name: cat.name })}
+                        className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 rounded border border-transparent hover:border-rose-900 cursor-pointer"
+                        title="Delete Category"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View (Visible on screens >= 640px) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[650px]">
+                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800 whitespace-nowrap">
                   <tr>
-                    <th className="p-3">Category</th>
-                    <th className="p-3">Slug</th>
-                    <th className="p-3">Products Count</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions (Edit / Delete)</th>
+                    <th className="p-3 whitespace-nowrap">Category</th>
+                    <th className="p-3 whitespace-nowrap">Slug</th>
+                    <th className="p-3 whitespace-nowrap">Products Count</th>
+                    <th className="p-3 whitespace-nowrap">Status</th>
+                    <th className="p-3 whitespace-nowrap text-right">Actions (Edit / Delete)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/80">
@@ -1169,13 +1394,13 @@ CREATE POLICY "Public full access to click_logs"
                           </div>
                         </td>
 
-                        <td className="p-3 font-mono text-zinc-400">/category/{cat.slug}</td>
+                        <td className="p-3 font-mono text-zinc-400 whitespace-nowrap">/category/{cat.slug}</td>
 
-                        <td className="p-3 font-mono text-white">
+                        <td className="p-3 font-mono text-white whitespace-nowrap">
                           {catProdCount} Deals
                         </td>
 
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
                             className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
                               cat.status === 'ACTIVE'
@@ -1187,11 +1412,11 @@ CREATE POLICY "Public full access to click_logs"
                           </span>
                         </td>
 
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                             <button
                               onClick={() => openEditCategory(cat)}
-                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer whitespace-nowrap"
                               title="Edit Category Name, Slug, Image"
                             >
                               <Edit3 className="w-3 h-3 text-amber-400" />
@@ -1733,6 +1958,29 @@ CREATE POLICY "Public full access to click_logs"
 
             {/* Connection Credentials Form */}
             <div className="pt-2 border-t border-zinc-800 space-y-4">
+              {/* Vite Environment Variables Status Card */}
+              <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white flex items-center gap-1.5 text-xs">
+                    <ShieldCheck className="w-4 h-4 text-sky-400" />
+                    <span>Vite Environment Variables (Client Context)</span>
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                    {envStatus.isUrlPresent && envStatus.isKeyPresent ? 'VITE ENV LOADED' : 'ACTIVE & CONFIGURED'}
+                  </span>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2 text-[11px] font-mono text-zinc-400">
+                  <div className="p-2 rounded bg-zinc-900 border border-zinc-800/80 truncate">
+                    <span className="text-zinc-500 block text-[10px]">VITE_SUPABASE_URL:</span>
+                    <span className="text-zinc-200 truncate block">{envStatus.url}</span>
+                  </div>
+                  <div className="p-2 rounded bg-zinc-900 border border-zinc-800/80 truncate">
+                    <span className="text-zinc-500 block text-[10px]">VITE_SUPABASE_ANON_KEY:</span>
+                    <span className="text-zinc-200 truncate block">{envStatus.keyPrefix}</span>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-3 text-xs">
                 <div>
                   <label className="block text-zinc-300 font-semibold mb-1">
@@ -1854,18 +2102,36 @@ CREATE POLICY "Public full access to click_logs"
                   </div>
 
                   {dbTestResult.tableCounts && (
-                    <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
-                      <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
-                        <span className="text-zinc-400 block">Categories in DB:</span>
-                        <strong className="text-white text-sm">{dbTestResult.tableCounts.categories}</strong>
-                      </div>
-                      <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
-                        <span className="text-zinc-400 block">Products in DB:</span>
-                        <strong className="text-white text-sm">{dbTestResult.tableCounts.products}</strong>
-                      </div>
-                      <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
-                        <span className="text-zinc-400 block">Users in DB:</span>
-                        <strong className="text-white text-sm">{dbTestResult.tableCounts.users}</strong>
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
+                        <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
+                          <span className="text-zinc-400 block text-[10px]">Categories:</span>
+                          <strong className="text-white text-sm">{dbTestResult.tableCounts.categories}</strong>
+                          {dbTestResult.permissions && (
+                            <span className="text-[9px] block text-emerald-400 mt-0.5">{dbTestResult.permissions.categories}</span>
+                          )}
+                        </div>
+                        <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
+                          <span className="text-zinc-400 block text-[10px]">Products:</span>
+                          <strong className="text-white text-sm">{dbTestResult.tableCounts.products}</strong>
+                          {dbTestResult.permissions && (
+                            <span className="text-[9px] block text-emerald-400 mt-0.5">{dbTestResult.permissions.products}</span>
+                          )}
+                        </div>
+                        <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
+                          <span className="text-zinc-400 block text-[10px]">Users / Partners:</span>
+                          <strong className="text-white text-sm">{dbTestResult.tableCounts.users}</strong>
+                          {dbTestResult.permissions && (
+                            <span className="text-[9px] block text-emerald-400 mt-0.5">{dbTestResult.permissions.users}</span>
+                          )}
+                        </div>
+                        <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800">
+                          <span className="text-zinc-400 block text-[10px]">Click Logs:</span>
+                          <strong className="text-white text-sm">{dbTestResult.tableCounts.clickLogs ?? 0}</strong>
+                          {dbTestResult.permissions && (
+                            <span className="text-[9px] block text-emerald-400 mt-0.5">{dbTestResult.permissions.clickLogs}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}

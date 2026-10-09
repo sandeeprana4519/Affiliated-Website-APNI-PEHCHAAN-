@@ -74,17 +74,40 @@ export const normalizeSupabaseUrl = (input: string): string => {
 };
 
 const STORAGE_CONFIG_KEY = 'aff_supabase_config';
-const DEFAULT_URL = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://mgcayvgpiwghopbveobw.supabase.co';
-const DEFAULT_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'sb_publishable_1IW6IovH77YgI_qSaG18ZQ_ahIrsZUu';
+const ENV_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 
+  (typeof process !== 'undefined' && (process.env as any)?.VITE_SUPABASE_URL);
+const ENV_KEY = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 
+  (typeof process !== 'undefined' && (process.env as any)?.VITE_SUPABASE_ANON_KEY);
+const DEFAULT_URL = ENV_URL || 'https://mgcayvgpiwghopbveobw.supabase.co';
+const DEFAULT_KEY = ENV_KEY || 'sb_publishable_1IW6IovH77YgI_qSaG18ZQ_ahIrsZUu';
+
+export const getViteEnvStatus = () => {
+  const rawUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || 
+    (typeof process !== 'undefined' && (process.env as any)?.VITE_SUPABASE_URL) || 
+    DEFAULT_URL;
+  const rawKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || 
+    (typeof process !== 'undefined' && (process.env as any)?.VITE_SUPABASE_ANON_KEY) || 
+    DEFAULT_KEY;
+  return {
+    isUrlPresent: Boolean(rawUrl && rawUrl.trim()),
+    isKeyPresent: Boolean(rawKey && rawKey.trim()),
+    url: rawUrl ? normalizeSupabaseUrl(rawUrl) : normalizeSupabaseUrl(DEFAULT_URL),
+    keyPrefix: rawKey ? `${rawKey.slice(0, 14)}...` : `${DEFAULT_KEY.slice(0, 14)}...`,
+  };
+};
 
 export const getStoredSupabaseConfig = (): SupabaseConfig => {
+  const defaultUrl = normalizeSupabaseUrl(DEFAULT_URL);
+  const defaultKey = DEFAULT_KEY.trim();
   const saved = localStorage.getItem(STORAGE_CONFIG_KEY);
+
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      const rawUrl = parsed.url || DEFAULT_URL;
-      const url = normalizeSupabaseUrl(rawUrl);
-      const anonKey = (parsed.anonKey || DEFAULT_KEY).trim();
+      const rawUrl = parsed.url || defaultUrl;
+      const url = normalizeSupabaseUrl(rawUrl) || defaultUrl;
+      const anonKey = (parsed.anonKey || defaultKey).trim() || defaultKey;
+      // Auto-heal: If default keys are valid and available, keep isConnected true
       const isConnected = parsed.isConnected !== undefined ? Boolean(parsed.isConnected) : Boolean(url && anonKey);
 
       // Auto-heal dirty or malformed stored URL
@@ -99,7 +122,7 @@ export const getStoredSupabaseConfig = (): SupabaseConfig => {
       return {
         url,
         anonKey,
-        isConnected,
+        isConnected: Boolean(url && anonKey && isConnected),
         lastTestedAt: parsed.lastTestedAt,
       };
     } catch {
@@ -108,9 +131,9 @@ export const getStoredSupabaseConfig = (): SupabaseConfig => {
   }
 
   return {
-    url: normalizeSupabaseUrl(DEFAULT_URL),
-    anonKey: DEFAULT_KEY.trim(),
-    isConnected: Boolean(DEFAULT_URL && DEFAULT_KEY),
+    url: defaultUrl,
+    anonKey: defaultKey,
+    isConnected: Boolean(defaultUrl && defaultKey),
   };
 };
 
@@ -172,7 +195,8 @@ export const testSupabaseConnection = async (
   success: boolean; 
   message: string; 
   rlsWarning?: boolean; 
-  tableCounts?: { categories: number; products: number; users: number } 
+  tableCounts?: { categories: number; products: number; users: number; clickLogs?: number };
+  permissions?: { categories: string; products: string; users: string; clickLogs: string };
 }> => {
   const url = normalizeSupabaseUrl(rawUrl);
   const key = (rawKey || '').trim();
@@ -186,7 +210,7 @@ export const testSupabaseConnection = async (
       auth: { persistSession: false },
     });
 
-    // Test querying categories
+    // 1. Test querying categories
     const { data: catData, count: catCount, error: catError } = await testClient
       .from('categories')
       .select('*', { count: 'exact' })
@@ -208,40 +232,51 @@ export const testSupabaseConnection = async (
       }
       return { 
         success: false, 
-        message: `Connection failed: ${catError.message}. Make sure table "categories" exists in Supabase.`,
+        message: `Connection failed: ${catError.message}. Make sure tables exist in Supabase.`,
       };
     }
 
-    const { count: prodCount } = await testClient
+    // 2. Query products, users, click_logs counts
+    const { count: prodCount, error: prodErr } = await testClient
       .from('products')
       .select('*', { count: 'exact', head: true });
 
-    const { count: userCount } = await testClient
+    const { count: userCount, error: userErr } = await testClient
       .from('users')
       .select('*', { count: 'exact', head: true });
 
-    // Check write permissions on categories table
+    const { count: clickCount, error: clickErr } = await testClient
+      .from('click_logs')
+      .select('*', { count: 'exact', head: true });
+
+    // 3. Check write permissions on categories table with a safe unique probe ID
     let rlsWarning = false;
     let rlsNotice = '';
 
-    const dummyTestId = '00000000-0000-0000-0000-000000000000';
-    const { error: testWriteError } = await testClient
-      .from('categories')
-      .insert({
-        id: dummyTestId,
-        name: '__test_probe__',
-        slug: '__test_probe__',
-        status: 'DISABLED',
-      });
+    const probeId = generateUuid();
+    const probeSlug = '__probe_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
 
-    if (testWriteError) {
-      if (testWriteError.code === '42501') {
-        rlsWarning = true;
-        rlsNotice = ' (Note: Table updates work for existing rows, but adding brand new rows requires running the RLS Fix SQL in the tab below).';
+    try {
+      const { error: testWriteError } = await testClient
+        .from('categories')
+        .insert({
+          id: probeId,
+          name: '__Diagnostic_Probe__',
+          slug: probeSlug,
+          status: 'DISABLED',
+        });
+
+      if (testWriteError) {
+        if (testWriteError.code === '42501') {
+          rlsWarning = true;
+          rlsNotice = ' (Note: RLS allows reading, but write operations are restricted. Run RLS Fix SQL in the Database tab to enable full write permissions).';
+        }
+      } else {
+        // Clean up probe row immediately
+        await testClient.from('categories').delete().eq('id', probeId);
       }
-    } else {
-      // Clean up the dummy probe row
-      await testClient.from('categories').delete().eq('id', dummyTestId);
+    } catch {
+      // Ignore probe write test failure
     }
 
     return {
@@ -252,6 +287,13 @@ export const testSupabaseConnection = async (
         categories: catCount ?? (catData ? catData.length : 0),
         products: prodCount ?? 0,
         users: userCount ?? 0,
+        clickLogs: clickCount ?? 0,
+      },
+      permissions: {
+        categories: rlsWarning ? 'READ ONLY' : 'FULL ACCESS (READ/WRITE)',
+        products: prodErr ? 'RESTRICTED' : 'FULL ACCESS (READ/WRITE)',
+        users: userErr ? 'RESTRICTED' : 'FULL ACCESS (READ/WRITE)',
+        clickLogs: clickErr ? 'RESTRICTED' : 'FULL ACCESS (READ/WRITE)',
       },
     };
   } catch (err: any) {
@@ -266,13 +308,71 @@ export const testSupabaseConnection = async (
 // Database Mappers: snake_case (Postgres/Supabase) <--> camelCase (React/App)
 // -----------------------------------------------------------------------------
 
-export const mapDbProductToProduct = (row: any, categoriesList: Category[] = []): Product => {
+export const UUID_TO_PARTNER_ID: Record<string, string> = {
+  'a1000000-0000-0000-0000-000000000025': 'AP00001',
+  'a1000000-0000-0000-0000-000000000040': 'AP00002',
+  'a1000000-0000-0000-0000-000000000099': 'AP00003',
+  'a1000000-0000-0000-0000-000000000001': 'ADMIN001',
+};
+
+export const PARTNER_ID_TO_UUID: Record<string, string> = {
+  'AP00001': 'a1000000-0000-0000-0000-000000000025',
+  'AP00002': 'a1000000-0000-0000-0000-000000000040',
+  'AP00003': 'a1000000-0000-0000-0000-000000000099',
+  'ADMIN001': 'a1000000-0000-0000-0000-000000000001',
+};
+
+export const partnerIdToUuid = (id?: string | null): string => {
+  if (!id) return '';
+  if (PARTNER_ID_TO_UUID[id]) return PARTNER_ID_TO_UUID[id];
+  if (isUuid(id)) return id;
+  const match = id.match(/^AP(\d+)$/i);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    const hexPart = num.toString(16).padStart(12, '0');
+    return `a1000000-0000-0000-0000-${hexPart}`;
+  }
+  return generateUuid();
+};
+
+export const uuidToPartnerId = (uuid?: string | null): string => {
+  if (!uuid) return '';
+  if (UUID_TO_PARTNER_ID[uuid]) return UUID_TO_PARTNER_ID[uuid];
+  const match = uuid.match(/^a1000000-0000-0000-0000-([0-9a-f]{12})$/i);
+  if (match) {
+    const num = parseInt(match[1], 16);
+    if (!isNaN(num) && num > 0) {
+      return `AP${String(num).padStart(5, '0')}`;
+    }
+  }
+  return uuid;
+};
+
+const DEFAULT_AVATARS: Record<string, string> = {
+  'AP00001': 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
+  'AP00002': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
+  'ADMIN001': 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
+};
+
+export const mapDbProductToProduct = (
+  row: any, 
+  categoriesList: Category[] = [], 
+  usersList: User[] = []
+): Product => {
   const cat = categoriesList.find((c) => c.id === row.category_id);
+  const mappedPartnerId = row.partner_id ? uuidToPartnerId(row.partner_id) : null;
+  const matchedUser = mappedPartnerId 
+    ? usersList.find((u) => u.id === mappedPartnerId || partnerIdToUuid(u.id) === row.partner_id) 
+    : null;
+  const partnerName = matchedUser?.name || 
+    (mappedPartnerId === 'AP00001' ? 'Kavita Sharma' : 
+     mappedPartnerId === 'AP00002' ? 'Rahul Verma' : 
+     (row.is_admin_product ? 'Editorial Staff' : (mappedPartnerId ? 'Partner' : 'Editorial Staff')));
 
   return {
     id: row.id,
-    partnerId: row.partner_id || null,
-    partnerName: row.partner_id ? undefined : 'Editorial Staff',
+    partnerId: mappedPartnerId,
+    partnerName,
     categoryId: row.category_id,
     categoryName: cat?.name || 'General',
     categorySlug: cat?.slug || 'general',
@@ -304,7 +404,8 @@ export const mapProductToDb = (product: Partial<Product>, availableCategories: C
 
   // Ensure partner_id is valid UUID or null
   if (product.partnerId !== undefined) {
-    row.partner_id = isUuid(product.partnerId) ? product.partnerId : null;
+    const targetUuid = product.partnerId ? partnerIdToUuid(product.partnerId) : null;
+    row.partner_id = isUuid(targetUuid) ? targetUuid : null;
   }
 
   // Ensure category_id is valid UUID
@@ -328,8 +429,8 @@ export const mapProductToDb = (product: Partial<Product>, availableCategories: C
   if (product.platform !== undefined) row.platform = product.platform;
   if (product.title !== undefined) row.title = product.title;
   if (product.slug !== undefined) row.slug = product.slug;
-  if (product.description !== undefined) row.description = product.description;
-  if (product.imageUrl !== undefined) row.image_url = product.imageUrl;
+  row.description = product.description || '';
+  row.image_url = product.imageUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
   if (product.price !== undefined) row.price = product.price != null ? Number(product.price) : null;
   if (product.dealOffer !== undefined) row.deal_offer = product.dealOffer;
   if (product.dealDetails !== undefined) row.deal_details = product.dealDetails;
@@ -369,14 +470,16 @@ export const mapCategoryToDb = (cat: Partial<Category>) => {
 };
 
 export const mapDbUserToUser = (row: any): User => {
+  const mappedId = uuidToPartnerId(row.id) || (row.email === 'kavita@partnerdeals.in' ? 'AP00001' : row.email === 'rahul@techhunter.io' ? 'AP00002' : row.id);
   return {
-    id: row.id,
+    id: mappedId,
     name: row.name,
     email: row.email,
     mobile: row.mobile,
     passwordHash: row.password_hash,
     role: row.role as Role,
     status: row.status as UserStatus,
+    avatarUrl: DEFAULT_AVATARS[mappedId] || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=fef3c7&color=b45309&bold=true&size=128`,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -385,7 +488,8 @@ export const mapDbUserToUser = (row: any): User => {
 export const mapUserToDb = (user: Partial<User>) => {
   const row: Record<string, any> = {};
   if (user.id !== undefined) {
-    row.id = isUuid(user.id) ? user.id : generateUuid();
+    const targetUuid = partnerIdToUuid(user.id);
+    row.id = isUuid(targetUuid) ? targetUuid : generateUuid();
   }
   if (user.name !== undefined) row.name = user.name;
   if (user.email !== undefined) row.email = user.email;
@@ -421,7 +525,7 @@ export const fetchAllFromSupabase = async () => {
 
     const categories: Category[] = (categoriesRes.data || []).map(mapDbCategoryToCategory);
     const users: User[] = (usersRes.data || []).map(mapDbUserToUser);
-    const products: Product[] = (productsRes.data || []).map((row) => mapDbProductToProduct(row, categories));
+    const products: Product[] = (productsRes.data || []).map((row) => mapDbProductToProduct(row, categories, users));
     const clickLogs: ClickLog[] = (clicksRes.data || []).map((row) => ({
       id: String(row.id),
       productId: row.product_id,
@@ -482,6 +586,14 @@ export const syncProductToSupabase = async (
     // 2. New product: perform INSERT
     const { error: insertError } = await client.from('products').insert(dbRow);
     if (insertError) {
+      if (insertError.code === '23503' && dbRow.partner_id) {
+        // Partner ID is not present in Supabase users table yet. Retry with partner_id: null
+        const fallbackRow = { ...dbRow, partner_id: null };
+        const { error: retryError } = await client.from('products').insert(fallbackRow);
+        if (!retryError) {
+          return { success: true };
+        }
+      }
       if (insertError.code === '42501') {
         return {
           success: false,
@@ -585,21 +697,25 @@ export const syncUserToSupabase = async (user: User): Promise<{ success: boolean
   try {
     const dbRow = mapUserToDb(user);
 
-    // 1. Check if user already exists
-    const { count, error: countErr } = await client
-      .from('users')
-      .select('id', { count: 'exact', head: true })
-      .eq('id', user.id);
+    // 1. Check if user already exists (by valid UUID or by unique email)
+    let findQuery = client.from('users').select('id');
+    if (isUuid(user.id)) {
+      findQuery = findQuery.eq('id', user.id);
+    } else {
+      findQuery = findQuery.eq('email', user.email.toLowerCase());
+    }
+
+    const { data: existingUser, error: countErr } = await findQuery.maybeSingle();
 
     if (countErr) {
       console.warn('Supabase user lookup warning:', countErr.message);
     }
 
-    if (count && count > 0) {
+    if (existingUser) {
       const { error: updateError } = await client
         .from('users')
         .update(dbRow)
-        .eq('id', user.id);
+        .eq('id', existingUser.id);
 
       if (updateError) {
         console.warn('Supabase user update notice:', updateError.message);

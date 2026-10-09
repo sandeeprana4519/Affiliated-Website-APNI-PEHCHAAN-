@@ -85,40 +85,43 @@ export const INITIAL_CATEGORIES: Category[] = [
 
 export const INITIAL_USERS: User[] = [
   {
-    id: 'a1000000-0000-0000-0000-000000000001',
+    id: 'ADMIN001',
     name: 'Platform Administrator',
     email: 'admin@dealhub.internal',
     mobile: '+91 98765 43210',
     passwordHash: '$argon2id$v=19$m=65536,t=3,p=4$simulatedHashAdminSecret',
     role: 'ADMIN',
     status: 'ACTIVE',
+    avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
     createdAt: '2026-01-01T10:00:00Z',
     updatedAt: '2026-01-01T10:00:00Z',
   },
   {
-    id: 'a1000000-0000-0000-0000-000000000025',
+    id: 'AP00001',
     name: 'Kavita Sharma',
     email: 'kavita@partnerdeals.in',
     mobile: '+91 98111 22233',
     passwordHash: '$argon2id$v=19$m=65536,t=3,p=4$simulatedHashPartner1',
     role: 'PARTNER',
     status: 'ACTIVE',
+    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=300&q=80',
     createdAt: '2026-02-10T11:00:00Z',
     updatedAt: '2026-02-10T11:00:00Z',
   },
   {
-    id: 'a1000000-0000-0000-0000-000000000040',
+    id: 'AP00002',
     name: 'Rahul Verma',
     email: 'rahul@techhunter.io',
     mobile: '+91 98222 33344',
     passwordHash: '$argon2id$v=19$m=65536,t=3,p=4$simulatedHashPartner2',
     role: 'PARTNER',
     status: 'ACTIVE',
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80',
     createdAt: '2026-03-01T14:30:00Z',
     updatedAt: '2026-03-01T14:30:00Z',
   },
   {
-    id: 'a1000000-0000-0000-0000-000000000099',
+    id: 'AP00003',
     name: 'Spam Deal Submitter',
     email: 'blocked@spammer.org',
     mobile: '+91 98999 88877',
@@ -182,7 +185,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   // PARTNER 25 PRODUCTS
   {
     id: 'f1000000-0000-0000-0000-000000000201',
-    partnerId: 'a1000000-0000-0000-0000-000000000025',
+    partnerId: 'AP00001',
     partnerName: 'Kavita Sharma',
     categoryId: 'c1000000-0000-0000-0000-000000000003',
     categoryName: 'Fashion',
@@ -205,7 +208,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'f1000000-0000-0000-0000-000000000202',
-    partnerId: 'a1000000-0000-0000-0000-000000000025',
+    partnerId: 'AP00001',
     partnerName: 'Kavita Sharma',
     categoryId: 'c1000000-0000-0000-0000-000000000005',
     categoryName: 'Beauty',
@@ -228,7 +231,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'f1000000-0000-0000-0000-000000000203',
-    partnerId: 'a1000000-0000-0000-0000-000000000025',
+    partnerId: 'AP00001',
     partnerName: 'Kavita Sharma',
     categoryId: 'c1000000-0000-0000-0000-000000000006',
     categoryName: 'Shoes',
@@ -253,7 +256,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   // PARTNER 40 PRODUCTS
   {
     id: 'f1000000-0000-0000-0000-000000000301',
-    partnerId: 'a1000000-0000-0000-0000-000000000040',
+    partnerId: 'AP00002',
     partnerName: 'Rahul Verma',
     categoryId: 'c1000000-0000-0000-0000-000000000002',
     categoryName: 'Electronics',
@@ -276,7 +279,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'f1000000-0000-0000-0000-000000000302',
-    partnerId: 'a1000000-0000-0000-0000-000000000040',
+    partnerId: 'AP00002',
     partnerName: 'Rahul Verma',
     categoryId: 'c1000000-0000-0000-0000-000000000002',
     categoryName: 'Electronics',

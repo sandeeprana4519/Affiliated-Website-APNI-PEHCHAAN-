@@ -27,7 +27,7 @@ export const ArchitectureDocs: React.FC = () => {
   };
 
   const SUPABASE_SQL_CODE = `-- ==============================================================================
--- DealSphere: Affiliate Product Discovery Platform
+-- APNI PEHCHAAN: Affiliate Product Discovery Platform
 -- Supabase SQL Editor Script (PostgreSQL / RLS / Indexes / Seed Data)
 -- ==============================================================================
 

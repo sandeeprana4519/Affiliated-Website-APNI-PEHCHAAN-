@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Compass, ShieldCheck, ExternalLink, Heart, Server } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
+import { ShieldCheck, ExternalLink, Heart, Server } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const { setCurrentView } = useApp();
@@ -18,7 +19,7 @@ export const Footer: React.FC = () => {
               Affiliate Transparency Disclosure
             </h4>
             <p className="text-xs text-slate-600 leading-relaxed max-w-5xl break-words">
-              DealSphere is an independent product discovery platform and not an e-commerce store. We do not sell items directly, process payments, or handle order fulfillment. When you click "Buy Now", you are safely redirected to verified external retailers including Amazon, Flipkart, or Meesho. We may earn an affiliate commission on qualifying purchases at zero additional cost to you.
+              APNI PEHCHAAN is an independent product discovery platform and not an e-commerce store. We do not sell items directly, process payments, or handle order fulfillment. When you click "Buy Now", you are safely redirected to verified external retailers including Amazon, Flipkart, or Meesho. We may earn an affiliate commission on qualifying purchases at zero additional cost to you.
             </p>
           </div>
         </div>
@@ -27,11 +28,11 @@ export const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 py-8 sm:py-10 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
         {/* Brand Col */}
         <div className="col-span-1 sm:col-span-2 md:col-span-1 space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 flex items-center justify-center shadow-xs shrink-0">
-              <Compass className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-extrabold text-slate-900 text-sm">DealSphere</span>
+          <div className="flex items-center gap-2.5">
+            <BrandLogo size={32} className="w-8 h-8" />
+            <span className="font-extrabold text-slate-900 text-sm tracking-wide uppercase">
+              <span className="text-amber-600">APNI</span> PEHCHAAN
+            </span>
           </div>
           <p className="text-xs text-slate-500 leading-relaxed break-words">
             Curated daily deals across leading Indian and global shopping platforms including Amazon, Flipkart, and Meesho.
@@ -122,7 +123,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="border-t border-slate-100 py-4 px-4 text-center text-xs text-slate-400">
-        © 2026 DealSphere. All rights reserved.
+        © 2026 APNI PEHCHAAN. All rights reserved.
       </div>
     </footer>
   );

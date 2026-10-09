@@ -15,7 +15,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ product, onClose }) => {
   if (!product) return null;
 
   const productUrl = `${window.location.origin}/product/${product.slug}`;
-  const shareText = `Check out this deal: ${product.title} on DealSphere!`;
+  const shareText = `Check out this deal: ${product.title} on APNI PEHCHAAN!`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(productUrl);
