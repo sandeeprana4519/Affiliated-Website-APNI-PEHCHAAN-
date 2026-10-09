@@ -1,20 +1,36 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Lock, Mail, ArrowRight, UserCheck, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, UserCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const PartnerLogin: React.FC = () => {
   const { loginAsUser, setCurrentView } = useApp();
-  const [email, setEmail] = useState('kavita@partnerdeals.in');
-  const [password, setPassword] = useState('••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    const res = loginAsUser(email, password);
-    if (!res.success) {
-      setErrorMessage(res.error || 'Login failed.');
+    if (!email.trim()) {
+      setErrorMessage('Please enter your partner email address or Partner ID.');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = loginAsUser(email.trim(), password);
+      if (!res.success) {
+        setErrorMessage(res.error || 'Login failed. Please check your credentials.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -26,15 +42,28 @@ export const PartnerLogin: React.FC = () => {
         </div>
         <h1 className="text-xl font-bold text-slate-900 tracking-tight">Partner Portal Login</h1>
         <p className="text-xs text-slate-500">
-          Sign in to manage and submit affiliate deals for editorial approval.
+          Sign in to submit and track your affiliate deals.
         </p>
       </div>
 
       <div className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4">
         {errorMessage && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMessage}</span>
+          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <span>{errorMessage}</span>
+              {errorMessage.toLowerCase().includes('password') && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentView('partner_forgot_password')}
+                    className="text-amber-800 underline font-semibold text-[11px] block mt-0.5 hover:text-amber-900 cursor-pointer"
+                  >
+                    Forgot Password? Reset or generate a new password here →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -48,12 +77,12 @@ export const PartnerLogin: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="partner@example.com or Partner ID (e.g. AP00001)"
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
+                placeholder="e.g. partner@example.com or Partner ID (e.g. AP00005)"
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
               />
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              You can log in using either your registered email address or your Partner ID (e.g. <strong>AP00001</strong>).
+              Log in with your registered email or sequential Partner ID (e.g. <strong>AP00005</strong>).
             </p>
           </div>
 
@@ -71,20 +100,30 @@ export const PartnerLogin: React.FC = () => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
+                placeholder="Enter your password"
+                className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
           <button
             type="submit"
-            className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+            disabled={isSubmitting}
+            className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs disabled:opacity-50"
           >
-            <span>Login to Partner Dashboard</span>
+            <span>{isSubmitting ? 'Signing in...' : 'Login to Partner Dashboard'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
@@ -96,33 +135,6 @@ export const PartnerLogin: React.FC = () => {
             className="text-amber-700 hover:underline font-semibold cursor-pointer"
           >
             Register Here
-          </button>
-        </div>
-      </div>
-
-      {/* Preset quick test login buttons */}
-      <div className="p-3.5 bg-slate-100/70 rounded-2xl border border-slate-200/80 text-xs text-slate-600 space-y-2">
-        <span className="text-xs text-slate-500 block uppercase font-semibold tracking-wide">Quick Testing Logins (Email or ID):</span>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => {
-              setEmail('AP00001');
-              setPassword('••••••••');
-            }}
-            className="p-2 rounded-xl bg-white border border-slate-200 hover:border-amber-500/50 hover:bg-slate-50 text-left cursor-pointer transition-colors shadow-xs"
-          >
-            <p className="text-amber-800 text-xs font-bold">Partner 25 (AP00001)</p>
-            <p className="text-[11px] text-slate-500 truncate">ID: AP00001 · Kavita</p>
-          </button>
-          <button
-            onClick={() => {
-              setEmail('AP00002');
-              setPassword('••••••••');
-            }}
-            className="p-2 rounded-xl bg-white border border-slate-200 hover:border-amber-500/50 hover:bg-slate-50 text-left cursor-pointer transition-colors shadow-xs"
-          >
-            <p className="text-amber-800 text-xs font-bold">Partner 40 (AP00002)</p>
-            <p className="text-[11px] text-slate-500 truncate">ID: AP00002 · Rahul</p>
           </button>
         </div>
       </div>
