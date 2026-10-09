@@ -24,7 +24,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ onShare, o
     selectedProductSlug, 
     getProductBySlug, 
     setCurrentView, 
-    openCategoryPage 
+    openCategoryPage,
+    affiliatePlatforms
   } = useApp();
 
   const product = selectedProductSlug ? getProductBySlug(selectedProductSlug) : null;
@@ -49,11 +50,23 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ onShare, o
     );
   }
 
-  const platformBadge = {
-    AMAZON: { label: 'Amazon Verified', color: 'text-amber-800 bg-amber-50 border-amber-200' },
-    FLIPKART: { label: 'Flipkart Assured', color: 'text-sky-800 bg-sky-50 border-sky-200' },
-    MEESHO: { label: 'Meesho Trusted', color: 'text-rose-800 bg-rose-50 border-rose-200' },
-  }[product.platform];
+  const foundPlatform = affiliatePlatforms?.find(
+    (p) => p.code.toUpperCase() === product.platform.toUpperCase() || p.id.toUpperCase() === product.platform.toUpperCase()
+  );
+
+  const platformBadge = foundPlatform
+    ? {
+        label: `${foundPlatform.name} Verified`,
+        color: foundPlatform.badgeBg || 'text-purple-800 bg-purple-50 border-purple-200',
+      }
+    : {
+        AMAZON: { label: 'Amazon Verified', color: 'text-amber-800 bg-amber-50 border-amber-200' },
+        FLIPKART: { label: 'Flipkart Assured', color: 'text-sky-800 bg-sky-50 border-sky-200' },
+        MEESHO: { label: 'Meesho Trusted', color: 'text-rose-800 bg-rose-50 border-rose-200' },
+      }[product.platform] || {
+        label: `${product.platform} Verified`,
+        color: 'text-purple-800 bg-purple-50 border-purple-200',
+      };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">

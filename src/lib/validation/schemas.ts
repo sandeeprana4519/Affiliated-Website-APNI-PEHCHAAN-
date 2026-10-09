@@ -11,7 +11,7 @@ export const ALLOWED_AFFILIATE_DOMAINS = [
 ];
 
 // Helper to validate and disinfect affiliate URL
-export function validateAffiliateUrl(url: string): { isValid: boolean; error?: string } {
+export function validateAffiliateUrl(url: string, customAllowedDomains?: string[]): { isValid: boolean; error?: string } {
   try {
     const trimmed = url.trim();
     
@@ -32,14 +32,18 @@ export function validateAffiliateUrl(url: string): { isValid: boolean; error?: s
 
     // Domain validation against allowed partner platforms
     const hostname = parsed.hostname.toLowerCase();
-    const isDomainAllowed = ALLOWED_AFFILIATE_DOMAINS.some(
+    const effectiveAllowed = (customAllowedDomains && customAllowedDomains.length > 0)
+      ? Array.from(new Set([...ALLOWED_AFFILIATE_DOMAINS, ...customAllowedDomains.map((d) => d.toLowerCase().trim())]))
+      : ALLOWED_AFFILIATE_DOMAINS;
+
+    const isDomainAllowed = effectiveAllowed.some(
       (domain) => hostname === domain || hostname.endsWith('.' + domain)
     );
 
     if (!isDomainAllowed) {
       return {
         isValid: false,
-        error: `Affiliate domain "${hostname}" is not authorized. Allowed platforms: Amazon, Flipkart, Meesho.`,
+        error: `Affiliate domain "${hostname}" is not authorized. Authorized platforms: ${effectiveAllowed.slice(0, 4).join(', ')}...`,
       };
     }
 
@@ -77,16 +81,23 @@ export type LoginInput = z.infer<typeof LoginSchema>;
 
 // Product Submission Schema
 export const ProductSubmitSchema = z.object({
-  platform: z.enum(['AMAZON', 'FLIPKART', 'MEESHO']),
+  platform: z.string().min(1, 'Please select a valid affiliate platform'),
   categoryId: z.string().min(1, 'Please select a valid category'),
-  title: z.string().min(5, 'Title must be at least 5 characters').max(255),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
+  title: z.string().min(3, 'Title must be at least 3 characters').max(255),
+  description: z.string().optional().nullable(),
   imageUrl: z.string().min(1, 'Product image is required'),
   price: z.number().positive('Price must be greater than 0').optional().nullable(),
   dealOffer: z.string().max(128).optional().nullable(),
   dealDetails: z.string().max(255).optional().nullable(),
-  affiliateUrl: z.string().refine((url) => validateAffiliateUrl(url).isValid, {
-    message: 'Affiliate URL must be a valid HTTPS link to Amazon, Flipkart, or Meesho',
+  affiliateUrl: z.string().refine((url) => {
+    try {
+      const trimmed = (url || '').trim();
+      return trimmed.startsWith('https://');
+    } catch {
+      return false;
+    }
+  }, {
+    message: 'Affiliate URL must be a valid HTTPS link',
   }),
 });
 

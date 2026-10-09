@@ -48,6 +48,7 @@ model User {
   passwordHash String     @db.VarChar(255)
   role         Role       @default(PARTNER)
   status       UserStatus @default(ACTIVE)
+  avatarUrl    String?    @db.Text
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

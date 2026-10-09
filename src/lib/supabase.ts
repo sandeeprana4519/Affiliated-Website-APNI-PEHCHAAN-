@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Product, Category, User, ClickLog, Platform, ProductStatus, Role, UserStatus, CategoryStatus } from '../types';
+import { Product, Category, User, ClickLog, Platform, ProductStatus, Role, UserStatus, CategoryStatus, AffiliatePlatform } from '../types';
 
 export interface SupabaseConfig {
   url: string;
@@ -195,7 +195,9 @@ export const testSupabaseConnection = async (
   success: boolean; 
   message: string; 
   rlsWarning?: boolean; 
-  tableCounts?: { categories: number; products: number; users: number; clickLogs?: number };
+  hasAvatarColumn?: boolean;
+  hasAppImagesTable?: boolean;
+  tableCounts?: { categories: number; products: number; users: number; clickLogs?: number; appImages?: number };
   permissions?: { categories: string; products: string; users: string; clickLogs: string };
 }> => {
   const url = normalizeSupabaseUrl(rawUrl);
@@ -249,6 +251,41 @@ export const testSupabaseConnection = async (
       .from('click_logs')
       .select('*', { count: 'exact', head: true });
 
+    // Check if avatar_url column exists in users table
+    let hasAvatarColumn = false;
+    try {
+      const { error: avErr } = await testClient.from('users').select('avatar_url').limit(1);
+      hasAvatarColumn = !avErr;
+    } catch {
+      hasAvatarColumn = false;
+    }
+
+    // Check if dedicated app_images table exists
+    let hasAppImagesTable = false;
+    let appImagesCount = 0;
+    try {
+      const { count: imgCount, error: imgErr } = await testClient
+        .from('app_images')
+        .select('*', { count: 'exact', head: true });
+      hasAppImagesTable = !imgErr;
+      appImagesCount = imgCount ?? 0;
+    } catch {
+      hasAppImagesTable = false;
+    }
+
+    // Check if affiliate_platforms table exists
+    let hasAffiliatePlatformsTable = false;
+    let platformsCount = 0;
+    try {
+      const { count: platCount, error: platErr } = await testClient
+        .from('affiliate_platforms')
+        .select('*', { count: 'exact', head: true });
+      hasAffiliatePlatformsTable = !platErr;
+      platformsCount = platCount ?? 0;
+    } catch {
+      hasAffiliatePlatformsTable = false;
+    }
+
     // 3. Check write permissions on categories table with a safe unique probe ID
     let rlsWarning = false;
     let rlsNotice = '';
@@ -283,11 +320,16 @@ export const testSupabaseConnection = async (
       success: true,
       message: `Successfully connected to Supabase PostgreSQL database!${rlsNotice}`,
       rlsWarning,
+      hasAvatarColumn,
+      hasAppImagesTable,
+      hasAffiliatePlatformsTable,
       tableCounts: {
         categories: catCount ?? (catData ? catData.length : 0),
         products: prodCount ?? 0,
         users: userCount ?? 0,
         clickLogs: clickCount ?? 0,
+        appImages: appImagesCount,
+        platforms: platformsCount,
       },
       permissions: {
         categories: rlsWarning ? 'READ ONLY' : 'FULL ACCESS (READ/WRITE)',
@@ -354,6 +396,97 @@ const DEFAULT_AVATARS: Record<string, string> = {
   'ADMIN001': 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
 };
 
+// Memory cache fallbacks to ensure images and avatars never vanish even if localStorage is full or disabled
+const memoryAvatarCache: Record<string, string> = {};
+const memoryProductImageCache: Record<string, string> = {};
+
+// Persistent avatar cache in localStorage + memory to ensure user/partner photos never vanish
+export const getCachedUserAvatar = (userId?: string | null, email?: string | null): string | null => {
+  // Check memory cache first
+  if (userId && memoryAvatarCache[userId]) return memoryAvatarCache[userId];
+  if (email && memoryAvatarCache[email.toLowerCase()]) return memoryAvatarCache[email.toLowerCase()];
+  if (userId) {
+    const pId = uuidToPartnerId(userId);
+    if (pId && memoryAvatarCache[pId]) return memoryAvatarCache[pId];
+    const uuid = partnerIdToUuid(userId);
+    if (uuid && memoryAvatarCache[uuid]) return memoryAvatarCache[uuid];
+  }
+
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('aff_cached_avatars');
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    if (userId && map[userId]) return map[userId];
+    if (email && map[email.toLowerCase()]) return map[email.toLowerCase()];
+    if (userId) {
+      const pId = uuidToPartnerId(userId);
+      if (pId && map[pId]) return map[pId];
+      const uuid = partnerIdToUuid(userId);
+      if (uuid && map[uuid]) return map[uuid];
+    }
+  } catch {}
+  return null;
+};
+
+export const setCachedUserAvatar = (avatarUrl: string, userId?: string | null, email?: string | null) => {
+  if (!avatarUrl) return;
+  // Always update memory cache
+  if (userId) {
+    memoryAvatarCache[userId] = avatarUrl;
+    const pId = uuidToPartnerId(userId);
+    if (pId) memoryAvatarCache[pId] = avatarUrl;
+    const uuid = partnerIdToUuid(userId);
+    if (uuid) memoryAvatarCache[uuid] = avatarUrl;
+  }
+  if (email) memoryAvatarCache[email.toLowerCase()] = avatarUrl;
+
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem('aff_cached_avatars');
+    const map = raw ? JSON.parse(raw) : {};
+    if (userId) {
+      map[userId] = avatarUrl;
+      const pId = uuidToPartnerId(userId);
+      if (pId) map[pId] = avatarUrl;
+      const uuid = partnerIdToUuid(userId);
+      if (uuid) map[uuid] = avatarUrl;
+    }
+    if (email) map[email.toLowerCase()] = avatarUrl;
+    localStorage.setItem('aff_cached_avatars', JSON.stringify(map));
+  } catch (e) {
+    console.warn('LocalStorage avatar cache notice (using memory fallback):', e);
+  }
+};
+
+// Persistent product image cache
+export const getCachedProductImage = (productId?: string | null): string | null => {
+  if (!productId) return null;
+  if (memoryProductImageCache[productId]) return memoryProductImageCache[productId];
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('aff_cached_product_images');
+    if (!raw) return null;
+    const map = JSON.parse(raw);
+    return map[productId] || null;
+  } catch {}
+  return null;
+};
+
+export const setCachedProductImage = (productId: string, imageUrl: string) => {
+  if (!productId || !imageUrl) return;
+  memoryProductImageCache[productId] = imageUrl;
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem('aff_cached_product_images');
+    const map = raw ? JSON.parse(raw) : {};
+    map[productId] = imageUrl;
+    localStorage.setItem('aff_cached_product_images', JSON.stringify(map));
+  } catch (e) {
+    console.warn('LocalStorage product image cache notice:', e);
+  }
+};
+
 export const mapDbProductToProduct = (
   row: any, 
   categoriesList: Category[] = [], 
@@ -369,6 +502,13 @@ export const mapDbProductToProduct = (
      mappedPartnerId === 'AP00002' ? 'Rahul Verma' : 
      (row.is_admin_product ? 'Editorial Staff' : (mappedPartnerId ? 'Partner' : 'Editorial Staff')));
 
+  const cachedProductImg = getCachedProductImage(row.id);
+  const resolvedProductImg = row.image_url || cachedProductImg || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
+
+  if (row.image_url && (!cachedProductImg || cachedProductImg !== row.image_url)) {
+    setCachedProductImage(row.id, row.image_url);
+  }
+
   return {
     id: row.id,
     partnerId: mappedPartnerId,
@@ -380,7 +520,7 @@ export const mapDbProductToProduct = (
     title: row.title,
     slug: row.slug,
     description: row.description || '',
-    imageUrl: row.image_url,
+    imageUrl: resolvedProductImg,
     price: row.price != null ? Number(row.price) : null,
     dealOffer: row.deal_offer || null,
     dealDetails: row.deal_details || null,
@@ -471,6 +611,22 @@ export const mapCategoryToDb = (cat: Partial<Category>) => {
 
 export const mapDbUserToUser = (row: any): User => {
   const mappedId = uuidToPartnerId(row.id) || (row.email === 'kavita@partnerdeals.in' ? 'AP00001' : row.email === 'rahul@techhunter.io' ? 'AP00002' : row.id);
+  const cachedAvatar = getCachedUserAvatar(row.id, row.email) || getCachedUserAvatar(mappedId, row.email);
+  
+  // Distinguish real custom image from empty or ui-avatars placeholder
+  const isRealRemote = row.avatar_url && typeof row.avatar_url === 'string' && !row.avatar_url.includes('ui-avatars.com');
+  const isRealCached = cachedAvatar && typeof cachedAvatar === 'string' && !cachedAvatar.includes('ui-avatars.com');
+
+  const resolvedAvatar = isRealRemote 
+    ? row.avatar_url 
+    : (isRealCached 
+        ? cachedAvatar 
+        : (row.avatar_url || cachedAvatar || DEFAULT_AVATARS[mappedId] || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=fef3c7&color=b45309&bold=true&size=128`));
+  
+  if (isRealRemote && (!cachedAvatar || cachedAvatar !== row.avatar_url)) {
+    setCachedUserAvatar(row.avatar_url, row.id, row.email);
+  }
+
   return {
     id: mappedId,
     name: row.name,
@@ -479,7 +635,7 @@ export const mapDbUserToUser = (row: any): User => {
     passwordHash: row.password_hash,
     role: row.role as Role,
     status: row.status as UserStatus,
-    avatarUrl: DEFAULT_AVATARS[mappedId] || `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=fef3c7&color=b45309&bold=true&size=128`,
+    avatarUrl: resolvedAvatar,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -497,6 +653,45 @@ export const mapUserToDb = (user: Partial<User>) => {
   if (user.passwordHash !== undefined) row.password_hash = user.passwordHash;
   if (user.role !== undefined) row.role = user.role;
   if (user.status !== undefined) row.status = user.status;
+  if (user.avatarUrl !== undefined) row.avatar_url = user.avatarUrl;
+  return row;
+};
+
+export const mapDbPlatformToPlatform = (row: any): AffiliatePlatform => {
+  return {
+    id: row.id || row.code,
+    code: (row.code || row.id || '').toUpperCase(),
+    name: row.name || row.code,
+    domain: (row.domain || '').toLowerCase(),
+    allowedDomains: Array.isArray(row.allowed_domains)
+      ? row.allowed_domains
+      : typeof row.allowed_domains === 'string'
+      ? row.allowed_domains.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+      : [row.domain || ''],
+    sampleUrl: row.sample_url || undefined,
+    badgeBg: row.badge_bg || 'text-purple-800 bg-purple-50 border-purple-200',
+    status: (row.status === 'DISABLED' ? 'DISABLED' : 'ACTIVE') as 'ACTIVE' | 'DISABLED',
+    isDefault: Boolean(row.is_default),
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+};
+
+export const mapPlatformToDb = (platform: Partial<AffiliatePlatform>) => {
+  const row: Record<string, any> = {};
+  const code = (platform.code || platform.id || '').trim().toUpperCase();
+  if (platform.id !== undefined || platform.code !== undefined) {
+    row.id = code;
+    row.code = code;
+  }
+  if (platform.name !== undefined) row.name = platform.name.trim();
+  if (platform.domain !== undefined) row.domain = platform.domain.trim().toLowerCase();
+  if (platform.allowedDomains !== undefined) {
+    row.allowed_domains = platform.allowedDomains.map((d) => d.trim().toLowerCase()).filter(Boolean);
+  }
+  if (platform.sampleUrl !== undefined) row.sample_url = platform.sampleUrl ? platform.sampleUrl.trim() : null;
+  if (platform.badgeBg !== undefined) row.badge_bg = platform.badgeBg;
+  if (platform.status !== undefined) row.status = platform.status;
+  if (platform.isDefault !== undefined) row.is_default = Boolean(platform.isDefault);
   return row;
 };
 
@@ -509,11 +704,12 @@ export const fetchAllFromSupabase = async () => {
   if (!client) return null;
 
   try {
-    const [categoriesRes, productsRes, usersRes, clicksRes] = await Promise.all([
+    const [categoriesRes, productsRes, usersRes, clicksRes, platformsRes] = await Promise.all([
       client.from('categories').select('*').order('sort_order', { ascending: true }),
       client.from('products').select('*').order('created_at', { ascending: false }),
       client.from('users').select('*').order('created_at', { ascending: false }),
       client.from('click_logs').select('*').order('created_at', { ascending: false }).limit(50),
+      client.from('affiliate_platforms').select('*').order('created_at', { ascending: true }),
     ]);
 
     if (categoriesRes.error) {
@@ -530,17 +726,22 @@ export const fetchAllFromSupabase = async () => {
       id: String(row.id),
       productId: row.product_id,
       productTitle: products.find((p) => p.id === row.product_id)?.title || 'Product Deal',
-      platform: 'AMAZON',
+      platform: (row.platform as Platform) || 'AMAZON',
       timestamp: row.created_at,
       ipHash: row.ip_hash || 'hash_anon',
       userAgent: row.user_agent || 'Browser',
     }));
+
+    const affiliatePlatforms: AffiliatePlatform[] = (!platformsRes.error && platformsRes.data)
+      ? platformsRes.data.map(mapDbPlatformToPlatform)
+      : [];
 
     return {
       categories,
       products,
       users,
       clickLogs,
+      affiliatePlatforms,
     };
   } catch (err) {
     console.error('Error fetching data from Supabase:', err);
@@ -577,6 +778,18 @@ export const syncProductToSupabase = async (
         .eq('id', product.id);
 
       if (updateError) {
+        if (
+          updateError.code === '22P02' ||
+          updateError.code === '23514' ||
+          updateError.message?.toLowerCase().includes('affiliate_platform') ||
+          updateError.message?.toLowerCase().includes('enum')
+        ) {
+          return {
+            success: false,
+            error: `PostgreSQL Type Conflict (${updateError.code}): products.platform in Supabase is restricted by an ENUM and rejects "${dbRow.platform}". Please run the "Affiliate Platforms & Products SQL Fix" in Admin > Database tab.`,
+            code: updateError.code,
+          };
+        }
         console.warn('Supabase product update notice:', updateError.message);
         return { success: false, error: updateError.message, code: updateError.code };
       }
@@ -593,6 +806,18 @@ export const syncProductToSupabase = async (
         if (!retryError) {
           return { success: true };
         }
+      }
+      if (
+        insertError.code === '22P02' ||
+        insertError.code === '23514' ||
+        insertError.message?.toLowerCase().includes('affiliate_platform') ||
+        insertError.message?.toLowerCase().includes('enum')
+      ) {
+        return {
+          success: false,
+          error: `PostgreSQL Type Conflict (${insertError.code}): products.platform in Supabase is restricted by an ENUM and rejects "${dbRow.platform}". Please run the "Affiliate Platforms & Products SQL Fix" in Admin > Database tab to alter platform to VARCHAR.`,
+          code: insertError.code,
+        };
       }
       if (insertError.code === '42501') {
         return {
@@ -694,6 +919,10 @@ export const syncUserToSupabase = async (user: User): Promise<{ success: boolean
   const client = getSupabaseClient();
   if (!client) return { success: false, error: 'Database not connected' };
 
+  if (user.avatarUrl) {
+    setCachedUserAvatar(user.avatarUrl, user.id, user.email);
+  }
+
   try {
     const dbRow = mapUserToDb(user);
 
@@ -718,6 +947,12 @@ export const syncUserToSupabase = async (user: User): Promise<{ success: boolean
         .eq('id', existingUser.id);
 
       if (updateError) {
+        if (updateError.code === '42703' || updateError.message?.toLowerCase().includes('avatar_url')) {
+          // Column avatar_url does not exist yet in Supabase, retry safely
+          const { avatar_url, ...fallbackRow } = dbRow;
+          const { error: retryErr } = await client.from('users').update(fallbackRow).eq('id', existingUser.id);
+          if (!retryErr) return { success: true };
+        }
         console.warn('Supabase user update notice:', updateError.message);
         return { success: false, error: updateError.message, code: updateError.code };
       }
@@ -727,6 +962,11 @@ export const syncUserToSupabase = async (user: User): Promise<{ success: boolean
     // 2. New user: perform INSERT
     const { error: insertError } = await client.from('users').insert(dbRow);
     if (insertError) {
+      if (insertError.code === '42703' || insertError.message?.toLowerCase().includes('avatar_url')) {
+        const { avatar_url, ...fallbackRow } = dbRow;
+        const { error: retryErr } = await client.from('users').insert(fallbackRow);
+        if (!retryErr) return { success: true };
+      }
       if (insertError.code === '42501') {
         return {
           success: false,
@@ -774,5 +1014,72 @@ export const logClickToSupabase = async (productId: string, ipHash: string, user
     ]);
   } catch (err) {
     console.error('Failed to log click to Supabase:', err);
+  }
+};
+
+export const syncAffiliatePlatformToSupabase = async (
+  platform: AffiliatePlatform
+): Promise<{ success: boolean; error?: string; code?: string }> => {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, error: 'Database not connected' };
+
+  try {
+    const dbRow = mapPlatformToDb(platform);
+
+    const { count, error: countErr } = await client
+      .from('affiliate_platforms')
+      .select('code', { count: 'exact', head: true })
+      .eq('code', platform.code);
+
+    if (countErr && countErr.code === '42P01') {
+      return {
+        success: false,
+        error: 'Table affiliate_platforms does not exist in Supabase yet. Please run the SQL migration in Admin > Database tab.',
+        code: '42P01',
+      };
+    }
+
+    if (count && count > 0) {
+      const { error: updateError } = await client
+        .from('affiliate_platforms')
+        .update(dbRow)
+        .eq('code', platform.code);
+
+      if (updateError) {
+        return { success: false, error: updateError.message, code: updateError.code };
+      }
+      return { success: true };
+    }
+
+    const { error: insertError } = await client.from('affiliate_platforms').insert(dbRow);
+    if (insertError) {
+      if (insertError.code === '42P01') {
+        return {
+          success: false,
+          error: 'Table affiliate_platforms does not exist in Supabase yet. Please run the SQL migration in Admin > Database tab.',
+          code: '42P01',
+        };
+      }
+      return { success: false, error: insertError.message, code: insertError.code };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to sync affiliate platform', code: err?.code };
+  }
+};
+
+export const deleteAffiliatePlatformFromSupabase = async (platformCode: string) => {
+  const client = getSupabaseClient();
+  if (!client) return { success: false, error: 'Database not connected' };
+
+  try {
+    const { error } = await client
+      .from('affiliate_platforms')
+      .delete()
+      .or(`id.eq.${platformCode},code.eq.${platformCode}`);
+    if (error && error.code !== '42P01') throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message, code: err.code };
   }
 };

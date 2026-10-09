@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Product, Platform, Category, User, ProductStatus } from '../../types';
+import { Product, Platform, Category, User, ProductStatus, AffiliatePlatform } from '../../types';
+import { POPULAR_PLATFORM_PRESETS } from '../../data/initialData';
 import { normalizeSupabaseUrl, getViteEnvStatus } from '../../lib/supabase';
+import { compressImage } from '../../lib/imageUtils';
 import { 
   Shield, 
   Users, 
@@ -60,6 +62,18 @@ const PRESET_CATEGORY_IMAGES = [
   { label: 'Kids', url: 'https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?auto=format&fit=crop&w=600&q=80' }
 ];
 
+const BADGE_COLOR_OPTIONS = [
+  { label: 'Purple / Violet', value: 'text-purple-800 bg-purple-50 border-purple-200', bg: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { label: 'Pink / Magenta', value: 'text-pink-800 bg-pink-50 border-pink-200', bg: 'bg-pink-100 text-pink-800 border-pink-200' },
+  { label: 'Rose / Coral', value: 'text-rose-800 bg-rose-50 border-rose-200', bg: 'bg-rose-100 text-rose-800 border-rose-200' },
+  { label: 'Emerald / Green', value: 'text-emerald-800 bg-emerald-50 border-emerald-200', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+  { label: 'Teal / Cyan', value: 'text-teal-800 bg-teal-50 border-teal-200', bg: 'bg-teal-100 text-teal-800 border-teal-200' },
+  { label: 'Indigo / Navy', value: 'text-indigo-800 bg-indigo-50 border-indigo-200', bg: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  { label: 'Sky / Blue', value: 'text-sky-800 bg-sky-50 border-sky-200', bg: 'bg-sky-100 text-sky-800 border-sky-200' },
+  { label: 'Amber / Orange', value: 'text-amber-800 bg-amber-50 border-amber-200', bg: 'bg-amber-100 text-amber-800 border-amber-200' },
+  { label: 'Dark / Slate', value: 'text-slate-800 bg-slate-100 border-slate-300', bg: 'bg-slate-200 text-slate-800 border-slate-300' },
+];
+
 export const AdminDashboard: React.FC = () => {
   const { 
     currentUser, 
@@ -78,6 +92,12 @@ export const AdminDashboard: React.FC = () => {
     addCategory,
     updateCategory,
     deleteCategory,
+    affiliatePlatforms,
+    activeAffiliatePlatforms,
+    addAffiliatePlatform,
+    updateAffiliatePlatform,
+    deleteAffiliatePlatform,
+    togglePlatformStatus,
     clickLogs,
     clearClickLogs,
     platformSettings,
@@ -95,7 +115,7 @@ export const AdminDashboard: React.FC = () => {
     showToast
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'pending' | 'products' | 'partners' | 'categories' | 'add_admin_product' | 'settings' | 'database'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'products' | 'partners' | 'categories' | 'platforms' | 'add_admin_product' | 'settings' | 'database'>('pending');
   const [productSearch, setProductSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [partnerSearch, setPartnerSearch] = useState('');
@@ -111,7 +131,9 @@ export const AdminDashboard: React.FC = () => {
     success: boolean; 
     message: string; 
     rlsWarning?: boolean; 
-    tableCounts?: { categories: number; products: number; users: number; clickLogs?: number };
+    hasAvatarColumn?: boolean;
+    hasAppImagesTable?: boolean;
+    tableCounts?: { categories: number; products: number; users: number; clickLogs?: number; appImages?: number };
     permissions?: { categories: string; products: string; users: string; clickLogs: string };
   } | null>(null);
 
@@ -144,12 +166,177 @@ DROP POLICY IF EXISTS "Public full access to click_logs" ON public.click_logs;
 CREATE POLICY "Public full access to click_logs"
   ON public.click_logs FOR ALL TO public USING (true) WITH CHECK (true);`;
 
+  const IMAGE_SCHEMA_FIX_SQL = `-- ==============================================================================
+-- APNI PEHCHAAN: IMAGE & AVATAR PERSISTENCE SQL GENERATOR
+-- Run this in your Supabase SQL Editor (https://supabase.com/dashboard -> SQL Editor -> New Query -> Run)
+-- ==============================================================================
+
+-- 1. Ensure avatar_url column exists in users table with unlimited TEXT capacity (Fixes partner avatar disappearing!)
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.users ALTER COLUMN avatar_url TYPE TEXT;
+
+-- 2. Ensure image_url column in products & categories is unlimited TEXT (prevents truncated base64/long URLs)
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.products ALTER COLUMN image_url TYPE TEXT;
+
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.categories ALTER COLUMN image_url TYPE TEXT;
+
+-- 3. Dedicated image storage table for partner avatars and product deals
+CREATE TABLE IF NOT EXISTS public.app_images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type VARCHAR(32) NOT NULL, -- 'user_avatar', 'product_image', 'category_image'
+  entity_id VARCHAR(191),
+  image_url TEXT NOT NULL,
+  file_name VARCHAR(255),
+  mime_type VARCHAR(64),
+  file_size INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for instant image lookup
+CREATE INDEX IF NOT EXISTS idx_app_images_lookup ON public.app_images (entity_type, entity_id);
+
+-- 4. Disable Row Level Security (RLS) to permit full read & write access
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_images DISABLE ROW LEVEL SECURITY;
+
+-- 5. Grant permissions to anon and service_role
+GRANT ALL ON TABLE public.users TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.products TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.categories TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.app_images TO anon, authenticated, service_role;`;
+
+  const PLATFORM_SCHEMA_FIX_SQL = `-- ==============================================================================
+-- APNI PEHCHAAN: AFFILIATE PLATFORMS & DYNAMIC PRODUCTS FIX SQL GENERATOR
+-- Run this in your Supabase SQL Editor (https://supabase.com/dashboard -> SQL Editor -> New Query -> Run)
+-- ==============================================================================
+
+-- 1. FIX: Convert products.platform & click_logs.platform from restricted ENUM 
+--    ('AMAZON','FLIPKART','MEESHO') to dynamic VARCHAR(64).
+--    This allows products from ANY affiliate platform (Myntra, Ajio, Nykaa, etc.)
+--    to be saved in Supabase without PostgreSQL error 22P02 (invalid input value for enum).
+DO $$
+BEGIN
+  -- Convert products.platform to VARCHAR(64)
+  BEGIN
+    ALTER TABLE public.products ALTER COLUMN platform TYPE VARCHAR(64) USING platform::text;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Skipping products.platform alter: %', SQLERRM;
+  END;
+
+  -- Convert click_logs.platform to VARCHAR(64)
+  BEGIN
+    ALTER TABLE public.click_logs ALTER COLUMN platform TYPE VARCHAR(64) USING platform::text;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Skipping click_logs.platform alter: %', SQLERRM;
+  END;
+END $$;
+
+-- 2. Drop any old CHECK constraints on products.platform that restrict allowed names
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN (
+    SELECT conname 
+    FROM pg_constraint 
+    WHERE conrelid = 'public.products'::regclass 
+      AND (conname LIKE '%platform%' OR pg_get_constraintdef(oid) LIKE '%platform%')
+      AND contype = 'c'
+  ) LOOP
+    EXECUTE 'ALTER TABLE public.products DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
+  END LOOP;
+END $$;
+
+-- 3. CREATE dedicated affiliate_platforms table in Supabase
+CREATE TABLE IF NOT EXISTS public.affiliate_platforms (
+  id VARCHAR(64) PRIMARY KEY,
+  code VARCHAR(64) NOT NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  domain VARCHAR(255) NOT NULL,
+  allowed_domains TEXT[] DEFAULT '{}',
+  sample_url TEXT,
+  badge_bg VARCHAR(255),
+  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+  is_default BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for instant lookup by platform code
+CREATE INDEX IF NOT EXISTS idx_affiliate_platforms_code ON public.affiliate_platforms (code);
+
+-- 4. SEED CORE PLATFORMS (Amazon, Flipkart, Meesho) and popular presets
+INSERT INTO public.affiliate_platforms (id, code, name, domain, allowed_domains, sample_url, badge_bg, status, is_default)
+VALUES 
+  ('AMAZON', 'AMAZON', 'Amazon', 'amazon.in', ARRAY['amazon.in', 'amazon.com', 'amzn.to'], 'https://www.amazon.in/dp/B0BDK62PDX?tag=apnipehchaan-21', 'text-amber-800 bg-amber-50 border-amber-200', 'ACTIVE', true),
+  ('FLIPKART', 'FLIPKART', 'Flipkart', 'flipkart.com', ARRAY['flipkart.com', 'fkrt.it'], 'https://www.flipkart.com/item/p/itm123?affid=apnipehchaan', 'text-sky-800 bg-sky-50 border-sky-200', 'ACTIVE', true),
+  ('MEESHO', 'MEESHO', 'Meesho', 'meesho.com', ARRAY['meesho.com'], 'https://www.meesho.com/s/p/12345?aff=apnipehchaan', 'text-rose-800 bg-rose-50 border-rose-200', 'ACTIVE', true),
+  ('MYNTRA', 'MYNTRA', 'Myntra', 'myntra.com', ARRAY['myntra.com', 'myntr.it'], 'https://www.myntra.com', 'text-pink-800 bg-pink-50 border-pink-200', 'ACTIVE', false),
+  ('AJIO', 'AJIO', 'Ajio', 'ajio.com', ARRAY['ajio.com'], 'https://www.ajio.com', 'text-teal-800 bg-teal-50 border-teal-200', 'ACTIVE', false),
+  ('NYKAA', 'NYKAA', 'Nykaa', 'nykaa.com', ARRAY['nykaa.com'], 'https://www.nykaa.com', 'text-rose-800 bg-rose-50 border-rose-200', 'ACTIVE', false)
+ON CONFLICT (code) DO UPDATE SET 
+  name = EXCLUDED.name,
+  domain = EXCLUDED.domain,
+  allowed_domains = EXCLUDED.allowed_domains;
+
+-- 5. DISABLE ROW LEVEL SECURITY (RLS) & GRANT PERMISSIONS
+ALTER TABLE public.affiliate_platforms DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.click_logs DISABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE public.affiliate_platforms TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.products TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.categories TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.users TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.click_logs TO anon, authenticated, service_role;
+
+-- 6. ENSURE UNLIMITED TEXT CAPACITY FOR IMAGES AND AVATARS
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.users ALTER COLUMN avatar_url TYPE TEXT;
+
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.products ALTER COLUMN image_url TYPE TEXT;
+
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.categories ALTER COLUMN image_url TYPE TEXT;
+
+-- 7. NOTIFY PostgREST to reload schema cache instantly
+NOTIFY pgrst, 'reload schema';`;
+
+  const [copiedImageSql, setCopiedImageSql] = useState(false);
+  const [copiedPlatformSql, setCopiedPlatformSql] = useState(false);
+
   // Modals state
   const [selectedPartnerDetails, setSelectedPartnerDetails] = useState<User | null>(null);
   const [editingPartner, setEditingPartner] = useState<User | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'product' | 'partner' | 'category'; id: string; name: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'product' | 'partner' | 'category' | 'platform'; id: string; name: string } | null>(null);
+
+  // Affiliate Platform management states
+  const [isAddingPlatform, setIsAddingPlatform] = useState(false);
+  const [platformSearch, setPlatformSearch] = useState('');
+  const [newPlatName, setNewPlatName] = useState('');
+  const [newPlatCode, setNewPlatCode] = useState('');
+  const [newPlatDomain, setNewPlatDomain] = useState('');
+  const [newPlatAllowedDomains, setNewPlatAllowedDomains] = useState('');
+  const [newPlatSampleUrl, setNewPlatSampleUrl] = useState('');
+  const [newPlatBadgeBg, setNewPlatBadgeBg] = useState('text-purple-800 bg-purple-50 border-purple-200');
+  const [newPlatStatus, setNewPlatStatus] = useState<'ACTIVE' | 'DISABLED'>('ACTIVE');
+
+  // Edit Platform state
+  const [editingPlatform, setEditingPlatform] = useState<AffiliatePlatform | null>(null);
+  const [editPlatName, setEditPlatName] = useState('');
+  const [editPlatDomain, setEditPlatDomain] = useState('');
+  const [editPlatAllowedDomains, setEditPlatAllowedDomains] = useState('');
+  const [editPlatSampleUrl, setEditPlatSampleUrl] = useState('');
+  const [editPlatBadgeBg, setEditPlatBadgeBg] = useState('text-purple-800 bg-purple-50 border-purple-200');
+  const [editPlatStatus, setEditPlatStatus] = useState<'ACTIVE' | 'DISABLED'>('ACTIVE');
 
   // Password visibility in Partner Details Modal
   const [showPasswordHash, setShowPasswordHash] = useState(false);
@@ -235,18 +422,20 @@ CREATE POLICY "Public full access to click_logs"
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Image size exceeds 5MB limit.', 'error');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setter(base64);
-      showToast('Image uploaded and loaded into preview!', 'success');
-    };
-    reader.readAsDataURL(file);
+    compressImage(file, 900, 900, 0.85)
+      .then((optimized) => {
+        setter(optimized);
+        showToast('Image optimized and loaded into preview!', 'success');
+      })
+      .catch(() => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          setter(base64);
+          showToast('Image uploaded and loaded into preview!', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -355,16 +544,16 @@ CREATE POLICY "Public full access to click_logs"
       platform: adminPlatform,
       categoryId: adminCatId || categories[0]?.id,
       title: adminTitle,
-      description: adminDesc,
+      description: adminTitle,
       imageUrl: adminImage,
       price: adminPrice ? parseFloat(adminPrice) : null,
-      dealOffer: adminDealOffer || null,
-      dealDetails: adminDealDetails || null,
+      dealOffer: null,
+      dealDetails: null,
       affiliateUrl: adminAffiliateUrl,
       featured: adminFeatured,
     });
     setAdminTitle('');
-    setAdminDesc('');
+    setAdminPrice('');
     setActiveTab('products');
   };
 
@@ -376,6 +565,102 @@ CREATE POLICY "Public full access to click_logs"
     setNewCatName('');
     setNewCatSlug('');
     setNewCatImage(PRESET_CATEGORY_IMAGES[0].url);
+  };
+
+  // Apply quick platform preset (e.g. Myntra, Ajio, Nykaa, etc.)
+  const handleApplyPreset = (preset: (typeof POPULAR_PLATFORM_PRESETS)[0]) => {
+    const res = addAffiliatePlatform({
+      code: preset.code,
+      name: preset.name,
+      domain: preset.domain,
+      allowedDomains: preset.allowedDomains,
+      sampleUrl: preset.sampleUrl,
+      badgeBg: preset.badgeBg,
+      status: 'ACTIVE',
+    });
+    if (res.success) {
+      showToast(`Added platform "${preset.name}" successfully!`, 'success');
+    } else {
+      showToast(res.error || 'Failed to add preset platform.', 'error');
+    }
+  };
+
+  // Submit New Affiliate Platform
+  const handleCreatePlatformSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPlatName.trim() || !newPlatCode.trim() || !newPlatDomain.trim()) {
+      showToast('Name, Code, and Primary Domain are required.', 'error');
+      return;
+    }
+
+    const cleanCode = newPlatCode.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    const cleanDomain = newPlatDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const allowed = newPlatAllowedDomains
+      ? newPlatAllowedDomains
+          .split(',')
+          .map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+          .filter(Boolean)
+      : [cleanDomain];
+
+    const res = addAffiliatePlatform({
+      code: cleanCode,
+      name: newPlatName.trim(),
+      domain: cleanDomain,
+      allowedDomains: Array.from(new Set([cleanDomain, ...allowed])),
+      sampleUrl: newPlatSampleUrl.trim() || undefined,
+      badgeBg: newPlatBadgeBg,
+      status: newPlatStatus,
+    });
+
+    if (res.success) {
+      setNewPlatName('');
+      setNewPlatCode('');
+      setNewPlatDomain('');
+      setNewPlatAllowedDomains('');
+      setNewPlatSampleUrl('');
+      setIsAddingPlatform(false);
+    } else {
+      showToast(res.error || 'Failed to create affiliate platform.', 'error');
+    }
+  };
+
+  // Open Edit Platform Modal
+  const openEditPlatform = (platform: AffiliatePlatform) => {
+    setEditingPlatform(platform);
+    setEditPlatName(platform.name);
+    setEditPlatDomain(platform.domain);
+    setEditPlatAllowedDomains((platform.allowedDomains || [platform.domain]).join(', '));
+    setEditPlatSampleUrl(platform.sampleUrl || '');
+    setEditPlatBadgeBg(platform.badgeBg || 'text-purple-800 bg-purple-50 border-purple-200');
+    setEditPlatStatus(platform.status);
+  };
+
+  // Submit Platform Edit
+  const handleSavePlatformEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlatform) return;
+    const cleanDomain = editPlatDomain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const allowed = editPlatAllowedDomains
+      ? editPlatAllowedDomains
+          .split(',')
+          .map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''))
+          .filter(Boolean)
+      : [cleanDomain];
+
+    const res = updateAffiliatePlatform(editingPlatform.id, {
+      name: editPlatName.trim(),
+      domain: cleanDomain,
+      allowedDomains: Array.from(new Set([cleanDomain, ...allowed])),
+      sampleUrl: editPlatSampleUrl.trim(),
+      badgeBg: editPlatBadgeBg,
+      status: editPlatStatus,
+    });
+
+    if (res.success) {
+      setEditingPlatform(null);
+    } else {
+      showToast(res.error || 'Failed to update platform.', 'error');
+    }
   };
 
   // Settings Save Submit
@@ -614,6 +899,18 @@ CREATE POLICY "Public full access to click_logs"
           }`}
         >
           Categories ({categories.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('platforms')}
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'platforms'
+              ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Affiliate Platforms ({affiliatePlatforms.length})</span>
         </button>
 
         <button
@@ -1443,8 +1740,367 @@ CREATE POLICY "Public full access to click_logs"
       )}
 
       {/* =========================================================================
-          TAB 5: Admin Add New Product (WITH PRODUCT IMAGE UPLOAD OPTION)
+          TAB: Affiliate Platforms Management (Admin Can Add Any E-commerce Platform)
       ========================================================================= */}
+      {activeTab === 'platforms' && (
+        <div className="space-y-6">
+          {/* Header Banner & Add Platform Toggle */}
+          <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Layers className="w-5 h-5 text-indigo-400" />
+                <span>Affiliate Platforms Management</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 font-mono">
+                  {affiliatePlatforms.length} Registered
+                </span>
+              </h2>
+              <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">
+                Add and configure any e-commerce affiliate platform (e.g. Myntra, Ajio, Nykaa, Tata CLiQ).
+                Allowed domains are automatically whitelisted so partners and administrators can submit valid affiliate deals.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsAddingPlatform(!isAddingPlatform)}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isAddingPlatform ? 'Close Form' : '+ Add New Platform'}</span>
+            </button>
+          </div>
+
+          {/* Quick 1-Click Popular Platforms Presets */}
+          <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Popular Indian E-commerce Networks (1-Click Add):</span>
+              </span>
+              <span className="text-[11px] text-zinc-500 font-mono">Quick auto-config</span>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {POPULAR_PLATFORM_PRESETS.map((preset) => {
+                const isAlreadyAdded = affiliatePlatforms.some(
+                  (p) => p.code.toUpperCase() === preset.code.toUpperCase() || p.id.toUpperCase() === preset.code.toUpperCase()
+                );
+                return (
+                  <button
+                    key={preset.code}
+                    disabled={isAlreadyAdded}
+                    onClick={() => handleApplyPreset(preset)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all ${
+                      isAlreadyAdded
+                        ? 'bg-zinc-800/60 text-zinc-500 border border-zinc-800 cursor-not-allowed'
+                        : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 cursor-pointer hover:border-indigo-500/50'
+                    }`}
+                  >
+                    <span>{preset.name}</span>
+                    {isAlreadyAdded ? (
+                      <span className="text-[10px] text-emerald-400 font-mono">✓ Added</span>
+                    ) : (
+                      <span className="text-[10px] text-indigo-400 font-mono font-bold">+ Add</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Add New Affiliate Platform Form (Inline Drawer) */}
+          {isAddingPlatform && (
+            <div className="p-6 rounded-2xl bg-zinc-900 border border-indigo-500/30 shadow-xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                  <Plus className="w-4 h-4 text-indigo-400" />
+                  <span>Create Custom Affiliate Platform</span>
+                </h3>
+                <span className="text-[11px] text-zinc-400 font-mono">Real-time whitelist sync</span>
+              </div>
+
+              <form onSubmit={handleCreatePlatformSubmit} className="space-y-4 text-xs">
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-semibold">Platform Name *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Myntra, Ajio, Nykaa"
+                      value={newPlatName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewPlatName(val);
+                        if (!newPlatCode) {
+                          setNewPlatCode(val.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                        }
+                        if (!newPlatDomain && val.trim().length > 2) {
+                          setNewPlatDomain(val.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com');
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-semibold">Platform Code / Identifier *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. MYNTRA"
+                      value={newPlatCode}
+                      onChange={(e) => setNewPlatCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-semibold">Primary Store Domain *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. myntra.com"
+                      value={newPlatDomain}
+                      onChange={(e) => setNewPlatDomain(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-semibold">
+                      Allowed Whitelist Domains (Comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. myntra.com, myntr.it"
+                      value={newPlatAllowedDomains}
+                      onChange={(e) => setNewPlatAllowedDomains(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-[11px]"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      Includes official shortlink domains (e.g. fkrt.it, amzn.to). URLs matching these domains are accepted.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-400 mb-1 font-semibold">Sample Affiliate URL (Optional)</label>
+                    <input
+                      type="url"
+                      placeholder="https://www.myntra.com/product/123?aff_id=..."
+                      value={newPlatSampleUrl}
+                      onChange={(e) => setNewPlatSampleUrl(e.target.value)}
+                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-[11px]"
+                    />
+                  </div>
+                </div>
+
+                {/* Badge Color Preset */}
+                <div>
+                  <label className="block text-zinc-400 mb-1.5 font-semibold">Badge Color Theme</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {BADGE_COLOR_OPTIONS.map((opt) => (
+                      <button
+                        type="button"
+                        key={opt.value}
+                        onClick={() => setNewPlatBadgeBg(opt.value)}
+                        className={`p-2 rounded-lg border text-left flex items-center justify-between cursor-pointer transition-all ${
+                          newPlatBadgeBg === opt.value
+                            ? 'border-indigo-500 bg-indigo-950/30'
+                            : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${opt.value}`}>
+                          {newPlatName || opt.label}
+                        </span>
+                        {newPlatBadgeBg === opt.value && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <span className="text-zinc-400 font-semibold">Initial Status:</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewPlatStatus(newPlatStatus === 'ACTIVE' ? 'DISABLED' : 'ACTIVE')}
+                      className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold cursor-pointer transition-colors ${
+                        newPlatStatus === 'ACTIVE'
+                          ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                      }`}
+                    >
+                      {newPlatStatus === 'ACTIVE' ? '● Active' : '○ Disabled'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPlatform(false)}
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg cursor-pointer shadow-lg shadow-indigo-600/20"
+                    >
+                      Create Affiliate Platform
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Platforms List Table */}
+          <div className="rounded-2xl bg-zinc-900 border border-zinc-800 overflow-hidden space-y-3 p-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-white text-sm">Configured Platforms</h3>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  ({activeAffiliatePlatforms.length} active, {affiliatePlatforms.length - activeAffiliatePlatforms.length} disabled)
+                </span>
+              </div>
+
+              <div className="relative min-w-[240px]">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Filter by name, code, domain..."
+                  value={platformSearch}
+                  onChange={(e) => setPlatformSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Platform Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left min-w-[700px]">
+                <thead className="bg-zinc-950 text-zinc-400 font-mono border-b border-zinc-800 whitespace-nowrap">
+                  <tr>
+                    <th className="p-3 whitespace-nowrap">Platform</th>
+                    <th className="p-3 whitespace-nowrap">Primary Domain & Whitelist</th>
+                    <th className="p-3 whitespace-nowrap">Products</th>
+                    <th className="p-3 whitespace-nowrap">Badge Preview</th>
+                    <th className="p-3 whitespace-nowrap">Status</th>
+                    <th className="p-3 whitespace-nowrap text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/80">
+                  {affiliatePlatforms
+                    .filter((p) => {
+                      if (!platformSearch) return true;
+                      const q = platformSearch.toLowerCase();
+                      return (
+                        p.name.toLowerCase().includes(q) ||
+                        p.code.toLowerCase().includes(q) ||
+                        p.domain.toLowerCase().includes(q)
+                      );
+                    })
+                    .map((plat) => {
+                      const prodCount = products.filter(
+                        (pr) => pr.platform.toUpperCase() === plat.code.toUpperCase() || pr.platform.toUpperCase() === plat.id.toUpperCase()
+                      ).length;
+
+                      return (
+                        <tr key={plat.id || plat.code} className="hover:bg-zinc-900/60 transition-colors">
+                          <td className="p-3 font-medium text-white">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-zinc-100">{plat.name}</span>
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                                {plat.code}
+                              </span>
+                              {plat.isDefault && (
+                                <span className="text-[9px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                  Core Default
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-3 text-zinc-300 font-mono text-[11px]">
+                            <div className="space-y-1">
+                              <span className="block text-zinc-200">{plat.domain}</span>
+                              {plat.allowedDomains && plat.allowedDomains.length > 1 && (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {plat.allowedDomains.map((d) => (
+                                    <span key={d} className="px-1.5 py-0.2 rounded bg-zinc-800/80 text-zinc-400 text-[10px]">
+                                      {d}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="p-3 font-mono">
+                            <span className="font-bold text-white">{prodCount}</span>{' '}
+                            <span className="text-zinc-500 text-[10px]">products</span>
+                          </td>
+
+                          <td className="p-3">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${plat.badgeBg || 'text-purple-800 bg-purple-50 border-purple-200'}`}>
+                              {plat.name}
+                            </span>
+                          </td>
+
+                          <td className="p-3 whitespace-nowrap">
+                            <button
+                              onClick={() => togglePlatformStatus(plat.id)}
+                              className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                                plat.status === 'ACTIVE'
+                                  ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
+                                  : 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:bg-zinc-700'
+                              }`}
+                              title="Click to toggle Active / Disabled status"
+                            >
+                              {plat.status === 'ACTIVE' ? <ToggleRight className="w-3.5 h-3.5 text-emerald-400" /> : <ToggleLeft className="w-3.5 h-3.5 text-zinc-500" />}
+                              <span>{plat.status}</span>
+                            </button>
+                          </td>
+
+                          <td className="p-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => openEditPlatform(plat)}
+                                className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 cursor-pointer"
+                                title="Edit Platform details"
+                              >
+                                <Edit3 className="w-3 h-3 text-indigo-400" />
+                                <span>Edit</span>
+                              </button>
+
+                              {plat.isDefault ? (
+                                <span
+                                  className="p-1.5 text-zinc-600 cursor-not-allowed opacity-50"
+                                  title="Core platform protected (cannot be deleted, but can be disabled)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => setConfirmDelete({ type: 'platform', id: plat.id, name: plat.name })}
+                                  className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-950/40 rounded border border-transparent hover:border-rose-900 cursor-pointer"
+                                  title="Delete Platform"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
       {activeTab === 'add_admin_product' && (
         <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-6 max-w-4xl">
           <div className="space-y-1">
@@ -1466,9 +2122,19 @@ CREATE POLICY "Public full access to click_logs"
                   onChange={(e) => setAdminPlatform(e.target.value as Platform)}
                   className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono"
                 >
-                  <option value="AMAZON">Amazon</option>
-                  <option value="FLIPKART">Flipkart</option>
-                  <option value="MEESHO">Meesho</option>
+                  {affiliatePlatforms && affiliatePlatforms.length > 0 ? (
+                    affiliatePlatforms.map((ap) => (
+                      <option key={ap.id || ap.code} value={ap.code}>
+                        {ap.name} ({ap.domain}) {ap.status === 'DISABLED' ? '[Disabled]' : ''}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="AMAZON">Amazon</option>
+                      <option value="FLIPKART">Flipkart</option>
+                      <option value="MEESHO">Meesho</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -1496,18 +2162,6 @@ CREATE POLICY "Public full access to click_logs"
                 value={adminTitle}
                 onChange={(e) => setAdminTitle(e.target.value)}
                 placeholder="e.g. Sony WH-1000XM5 Noise Cancelling Headphones"
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-zinc-400 mb-1 font-semibold">Short Description</label>
-              <textarea
-                rows={3}
-                required
-                value={adminDesc}
-                onChange={(e) => setAdminDesc(e.target.value)}
-                placeholder="Key specifications, why it's a great deal, savings info..."
                 className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
               />
             </div>
@@ -1591,37 +2245,15 @@ CREATE POLICY "Public full access to click_logs"
               </div>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-zinc-400 mb-1 font-semibold">Price in ₹</label>
-                <input
-                  type="number"
-                  value={adminPrice}
-                  onChange={(e) => setAdminPrice(e.target.value)}
-                  placeholder="e.g. 1999"
-                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-zinc-400 mb-1 font-semibold">Deal Badge / Discount</label>
-                <input
-                  type="text"
-                  value={adminDealOffer}
-                  onChange={(e) => setAdminDealOffer(e.target.value)}
-                  placeholder="e.g. Flat 40% Off"
-                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-zinc-400 mb-1 font-semibold">Offer Details</label>
-                <input
-                  type="text"
-                  value={adminDealDetails}
-                  onChange={(e) => setAdminDealDetails(e.target.value)}
-                  placeholder="e.g. Extra ₹500 bank offer"
-                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
-                />
-              </div>
+            <div>
+              <label className="block text-zinc-400 mb-1 font-semibold">Price in ₹ (Optional)</label>
+              <input
+                type="number"
+                value={adminPrice}
+                onChange={(e) => setAdminPrice(e.target.value)}
+                placeholder="e.g. 1999"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-xs"
+              />
             </div>
 
             <div>
@@ -2132,6 +2764,24 @@ CREATE POLICY "Public full access to click_logs"
                             <span className="text-[9px] block text-emerald-400 mt-0.5">{dbTestResult.permissions.clickLogs}</span>
                           )}
                         </div>
+                        <div className="p-2 rounded bg-zinc-950/60 border border-zinc-800 col-span-2 sm:col-span-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                            <span className="text-zinc-300 text-[11px] font-semibold">Image Persistence Schema:</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                              dbTestResult.hasAvatarColumn
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                            }`}>
+                              {dbTestResult.hasAvatarColumn ? 'avatar_url READY (PERSISTENT)' : 'ACTION REQUIRED (avatar_url missing)'}
+                            </span>
+                          </div>
+                          {!dbTestResult.hasAvatarColumn && (
+                            <span className="text-[10px] text-amber-400 font-mono">
+                              Run Image Fix SQL Below
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2223,6 +2873,37 @@ CREATE POLICY "Public full access to click_logs"
 
             <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-400 overflow-x-auto max-h-36">
               <pre>{RLS_FIX_SQL}</pre>
+            </div>
+          </div>
+
+          {/* Image & Avatar Database Persistence Fix Card */}
+          <div className="p-6 rounded-2xl bg-indigo-950/20 border border-indigo-500/30 space-y-3 text-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="text-sm font-bold text-indigo-300 flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-indigo-400" />
+                <span>Fix: Partner Avatar & Product Images (SQL Schema Generator)</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(IMAGE_SCHEMA_FIX_SQL);
+                  setCopiedImageSql(true);
+                  showToast('Image Schema Fix SQL copied! Run in Supabase SQL Editor to ensure avatar_url column exists.', 'success');
+                  setTimeout(() => setCopiedImageSql(false), 3000);
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg cursor-pointer flex items-center gap-1.5 text-xs shadow"
+              >
+                {copiedImageSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedImageSql ? 'SQL Copied!' : 'Copy Image Fix SQL'}</span>
+              </button>
+            </div>
+
+            <p className="text-zinc-300 leading-relaxed">
+              If partner profile pictures or custom deal images revert after a few seconds, run this SQL script in your Supabase SQL Editor. It adds the <code className="text-indigo-300 font-mono">avatar_url</code> column to the <code className="text-indigo-300 font-mono">users</code> table and ensures high-performance image storage support.
+            </p>
+
+            <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-400 overflow-x-auto max-h-36">
+              <pre>{IMAGE_SCHEMA_FIX_SQL}</pre>
             </div>
           </div>
 
@@ -2525,9 +3206,19 @@ CREATE POLICY "Public full access to click_logs"
                     onChange={(e) => setEditProdPlatform(e.target.value as Platform)}
                     className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono"
                   >
-                    <option value="AMAZON">Amazon</option>
-                    <option value="FLIPKART">Flipkart</option>
-                    <option value="MEESHO">Meesho</option>
+                    {affiliatePlatforms && affiliatePlatforms.length > 0 ? (
+                      affiliatePlatforms.map((ap) => (
+                        <option key={ap.id || ap.code} value={ap.code}>
+                          {ap.name} ({ap.domain})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="AMAZON">Amazon</option>
+                        <option value="FLIPKART">Flipkart</option>
+                        <option value="MEESHO">Meesho</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -2811,6 +3502,127 @@ CREATE POLICY "Public full access to click_logs"
       )}
 
       {/* =========================================================================
+          MODAL: EDIT AFFILIATE PLATFORM MODAL
+      ========================================================================= */}
+      {editingPlatform && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <h3 className="font-bold text-white text-base flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-indigo-400" />
+                <span>Edit Affiliate Platform ({editingPlatform.code})</span>
+              </h3>
+              <button
+                onClick={() => setEditingPlatform(null)}
+                className="p-1 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlatformEdit} className="space-y-4 text-xs">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 mb-1">Platform Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPlatName}
+                    onChange={(e) => setEditPlatName(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 mb-1">Primary Store Domain</label>
+                  <input
+                    type="text"
+                    required
+                    value={editPlatDomain}
+                    onChange={(e) => setEditPlatDomain(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Allowed Whitelist Domains (Comma-separated)</label>
+                <input
+                  type="text"
+                  value={editPlatAllowedDomains}
+                  onChange={(e) => setEditPlatAllowedDomains(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1">Sample Affiliate URL</label>
+                <input
+                  type="url"
+                  value={editPlatSampleUrl}
+                  onChange={(e) => setEditPlatSampleUrl(e.target.value)}
+                  className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-white font-mono text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 mb-1.5 font-semibold">Badge Color Theme</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {BADGE_COLOR_OPTIONS.map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.value}
+                      onClick={() => setEditPlatBadgeBg(opt.value)}
+                      className={`p-2 rounded-lg border text-left flex items-center justify-between cursor-pointer transition-all ${
+                        editPlatBadgeBg === opt.value
+                          ? 'border-indigo-500 bg-indigo-950/30'
+                          : 'border-zinc-800 bg-zinc-950 hover:border-zinc-700'
+                      }`}
+                    >
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${opt.value}`}>
+                        {editPlatName || opt.label}
+                      </span>
+                      {editPlatBadgeBg === opt.value && <Check className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditPlatStatus(editPlatStatus === 'ACTIVE' ? 'DISABLED' : 'ACTIVE')}
+                  className={`px-3 py-1.5 rounded text-xs font-mono font-bold cursor-pointer ${
+                    editPlatStatus === 'ACTIVE'
+                      ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                  }`}
+                >
+                  Status: {editPlatStatus}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingPlatform(null)}
+                    className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
           MODAL 5: DELETE CONFIRMATION MODAL
       ========================================================================= */}
       {confirmDelete && (
@@ -2848,6 +3660,8 @@ CREATE POLICY "Public full access to click_logs"
                     adminDeletePartner(confirmDelete.id);
                   } else if (confirmDelete.type === 'category') {
                     deleteCategory(confirmDelete.id);
+                  } else if (confirmDelete.type === 'platform') {
+                    deleteAffiliatePlatform(confirmDelete.id);
                   }
                   setConfirmDelete(null);
                 }}

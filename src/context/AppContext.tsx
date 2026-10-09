@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   User,
   Category,
@@ -8,12 +8,14 @@ import {
   Platform,
   ProductStatus,
   PlatformSettings,
+  AffiliatePlatform,
 } from '../types';
 import {
   INITIAL_CATEGORIES,
   INITIAL_USERS,
   INITIAL_PRODUCTS,
   INITIAL_CLICK_LOGS,
+  INITIAL_AFFILIATE_PLATFORMS,
 } from '../data/initialData';
 import { validateAffiliateUrl } from '../lib/validation/schemas';
 import {
@@ -26,9 +28,15 @@ import {
   deleteProductFromSupabase,
   syncCategoryToSupabase,
   deleteCategoryFromSupabase,
+  syncAffiliatePlatformToSupabase,
+  deleteAffiliatePlatformFromSupabase,
   syncUserToSupabase,
   deleteUserFromSupabase,
   logClickToSupabase,
+  getCachedUserAvatar,
+  setCachedUserAvatar,
+  getCachedProductImage,
+  setCachedProductImage,
   generateUuid,
   isUuid,
 } from '../lib/supabase';
@@ -83,7 +91,7 @@ interface AppContextType {
     platform: Platform;
     categoryId: string;
     title: string;
-    description: string;
+    description?: string | null;
     imageUrl: string;
     price?: number | null;
     dealOffer?: string | null;
@@ -106,7 +114,7 @@ interface AppContextType {
     platform: Platform;
     categoryId: string;
     title: string;
-    description: string;
+    description?: string | null;
     imageUrl: string;
     price?: number | null;
     dealOffer?: string | null;
@@ -122,6 +130,25 @@ interface AppContextType {
   toggleBlockPartner: (partnerId: string) => void;
   adminUpdatePartner: (partnerId: string, updates: Partial<User> & { plainPassword?: string }) => { success: boolean; error?: string };
   adminDeletePartner: (partnerId: string) => void;
+
+  // Affiliate Platforms Management (Amazon, Flipkart, Meesho, Myntra, etc.)
+  affiliatePlatforms: AffiliatePlatform[];
+  activeAffiliatePlatforms: AffiliatePlatform[];
+  addAffiliatePlatform: (platform: {
+    code: string;
+    name: string;
+    domain: string;
+    allowedDomains?: string[];
+    sampleUrl?: string;
+    badgeBg?: string;
+    status?: 'ACTIVE' | 'DISABLED';
+  }) => { success: boolean; error?: string };
+  updateAffiliatePlatform: (
+    id: string,
+    updates: Partial<AffiliatePlatform>
+  ) => { success: boolean; error?: string };
+  deleteAffiliatePlatform: (id: string) => { success: boolean; error?: string };
+  togglePlatformStatus: (id: string) => void;
 
   // Platform Settings & Backup
   platformSettings: PlatformSettings;
@@ -288,6 +315,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_SETTINGS;
   });
 
+  // Affiliate Platforms (Dynamic Amazon, Flipkart, Meesho, Myntra, etc.)
+  const [affiliatePlatforms, setAffiliatePlatforms] = useState<AffiliatePlatform[]>(() => {
+    const saved = localStorage.getItem('aff_platforms');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    return INITIAL_AFFILIATE_PLATFORMS;
+  });
+
+  const activeAffiliatePlatforms = affiliatePlatforms.filter((p) => p.status === 'ACTIVE');
+
+  // Unified list of authorized affiliate domains (core + custom platforms)
+  const allAllowedDomains = useMemo(() => {
+    const domainSet = new Set<string>();
+    (platformSettings?.allowedDomains || []).forEach((d) => domainSet.add(d.toLowerCase().trim()));
+    affiliatePlatforms.forEach((p) => {
+      if (p.domain) domainSet.add(p.domain.toLowerCase().trim());
+      (p.allowedDomains || []).forEach((d) => domainSet.add(d.toLowerCase().trim()));
+    });
+    return Array.from(domainSet).filter(Boolean);
+  }, [platformSettings?.allowedDomains, affiliatePlatforms]);
+
   // Toasts
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -323,7 +375,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (data.categories && data.categories.length > 0) setCategories(data.categories);
-      if (data.products && data.products.length > 0) setProducts(data.products);
+
+      if (data.affiliatePlatforms && data.affiliatePlatforms.length > 0) {
+        setAffiliatePlatforms((currentPlats) => {
+          const remoteCodes = new Set(data.affiliatePlatforms.map((p) => p.code.toUpperCase()));
+          const unsyncedLocal = currentPlats.filter((p) => !remoteCodes.has(p.code.toUpperCase()));
+          return [...data.affiliatePlatforms, ...unsyncedLocal];
+        });
+      }
+
+      if (data.products && data.products.length > 0) {
+        setProducts((currentProducts) => {
+          const remoteIds = new Set(data.products.map((p) => p.id));
+          // Preserve any locally created products that haven't reached remote yet
+          const unsyncedLocal = currentProducts.filter((p) => !remoteIds.has(p.id));
+          // For remote products, preserve custom local image if remote image is placeholder or missing
+          const mergedRemote = data.products.map((remoteProd) => {
+            const localProd = currentProducts.find((p) => p.id === remoteProd.id);
+            const cachedImg = getCachedProductImage(remoteProd.id);
+            const resolvedImg = 
+              (remoteProd.imageUrl && !remoteProd.imageUrl.includes('placeholder')) 
+                ? remoteProd.imageUrl 
+                : (localProd?.imageUrl || cachedImg || remoteProd.imageUrl);
+            return {
+              ...remoteProd,
+              imageUrl: resolvedImg,
+            };
+          });
+          return [...unsyncedLocal, ...mergedRemote];
+        });
+      }
+
       if (data.users && data.users.length > 0) {
         const adminUser: User = {
           id: 'ADMIN001',
@@ -337,16 +419,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           createdAt: '2026-01-01T10:00:00Z',
           updatedAt: new Date().toISOString(),
         };
-        const mergedUsers = [...data.users];
-        const adminIdx = mergedUsers.findIndex(
-          (u) => u.role === 'ADMIN' || u.email.toLowerCase() === 'sandeeprana4519@gmail.com'
-        );
-        if (adminIdx >= 0) {
-          mergedUsers[adminIdx] = { ...mergedUsers[adminIdx], ...adminUser };
-        } else {
-          mergedUsers.unshift(adminUser);
-        }
-        setUsers(mergedUsers);
+
+        setUsers((currentUsers) => {
+          // Preserve customized partner avatars so background sync never replaces them with initials
+          const mergedUsers = data.users.map((remoteUser) => {
+            const cachedAvatar = getCachedUserAvatar(remoteUser.id, remoteUser.email);
+            const localUser = currentUsers.find(
+              (u) => u.id === remoteUser.id || u.email.toLowerCase() === remoteUser.email.toLowerCase()
+            );
+
+            const isRemoteCustom = remoteUser.avatarUrl && !remoteUser.avatarUrl.includes('ui-avatars.com');
+            const isLocalCustom = localUser?.avatarUrl && !localUser.avatarUrl.includes('ui-avatars.com');
+            const isCachedCustom = cachedAvatar && !cachedAvatar.includes('ui-avatars.com');
+
+            const preservedAvatar = isLocalCustom 
+              ? localUser!.avatarUrl 
+              : (isRemoteCustom ? remoteUser.avatarUrl : (isCachedCustom ? cachedAvatar : (remoteUser.avatarUrl || localUser?.avatarUrl || cachedAvatar)));
+
+            return {
+              ...remoteUser,
+              ...(preservedAvatar ? { avatarUrl: preservedAvatar } : {}),
+            };
+          });
+
+          const adminIdx = mergedUsers.findIndex(
+            (u) => u.role === 'ADMIN' || u.email.toLowerCase() === 'sandeeprana4519@gmail.com'
+          );
+          if (adminIdx >= 0) {
+            mergedUsers[adminIdx] = { ...mergedUsers[adminIdx], ...adminUser };
+          } else {
+            mergedUsers.unshift(adminUser);
+          }
+          return mergedUsers;
+        });
+
+        // Keep active logged in partner's avatar synced in currentUser state without overwriting custom photo
+        setCurrentUser((current) => {
+          if (!current) return null;
+          const remoteMatched = data.users.find(
+            (u) => u.id === current.id || u.email.toLowerCase() === current.email.toLowerCase()
+          );
+          if (!remoteMatched) return current;
+
+          const isCurrentCustom = current.avatarUrl && !current.avatarUrl.includes('ui-avatars.com');
+          const isRemoteCustom = remoteMatched.avatarUrl && !remoteMatched.avatarUrl.includes('ui-avatars.com');
+          const finalAvatar = isCurrentCustom 
+            ? current.avatarUrl 
+            : (isRemoteCustom ? remoteMatched.avatarUrl : current.avatarUrl);
+
+          return {
+            ...current,
+            ...remoteMatched,
+            id: current.id,
+            avatarUrl: finalAvatar,
+          };
+        });
+
         syncUserToSupabase(adminUser).catch(() => {});
       }
       if (data.clickLogs && data.clickLogs.length > 0) setClickLogs(data.clickLogs);
@@ -383,22 +511,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setIsSyncingWithDb(true);
     let count = 0;
+    let typeConflictNotice = false;
     try {
-      // 1. Sync Categories first
+      // 1. Sync Affiliate Platforms first so foreign keys / platform codes are registered
+      for (const plat of affiliatePlatforms) {
+        await syncAffiliatePlatformToSupabase(plat);
+      }
+      // 2. Sync Categories
       for (const cat of categories) {
         await syncCategoryToSupabase(cat);
       }
-      // 2. Sync Users
+      // 3. Sync Users
       for (const u of users) {
         await syncUserToSupabase(u);
       }
-      // 3. Sync Products
+      // 4. Sync Products
       for (const prod of products) {
         const res = await syncProductToSupabase(prod, categories);
-        if (res.success) count++;
+        if (res.success) {
+          count++;
+        } else if (res.code === '22P02' || res.error?.includes('ENUM') || res.error?.includes('affiliate_platform')) {
+          typeConflictNotice = true;
+        }
       }
 
-      showToast(`Pushed ${count} products & ${categories.length} categories to Supabase database!`, 'success');
+      if (typeConflictNotice) {
+        showToast(
+          `Pushed ${count} products. Warning: Some products with custom affiliate platforms were blocked by PostgreSQL ENUM. Run the "Affiliate Platforms SQL Fix" in Database tab to fix!`,
+          'warning'
+        );
+      } else {
+        showToast(`Pushed ${count} products, ${affiliatePlatforms.length} platforms & ${categories.length} categories to Supabase database!`, 'success');
+      }
       return { success: true, count };
     } catch (err: any) {
       showToast(`Push failed: ${err.message}`, 'error');
@@ -435,6 +579,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('aff_click_logs', JSON.stringify(clickLogs));
   }, [clickLogs]);
+
+  useEffect(() => {
+    localStorage.setItem('aff_platforms', JSON.stringify(affiliatePlatforms));
+  }, [affiliatePlatforms]);
 
   useEffect(() => {
     if (currentUser) {
@@ -646,6 +794,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
+    if (newAvatar) {
+      setCachedUserAvatar(newAvatar, finalId, updatedUser.email);
+      if (oldId && oldId !== finalId) {
+        setCachedUserAvatar(newAvatar, oldId, updatedUser.email);
+      }
+    }
+
     // If connected to remote database, push user update
     if (supabaseConfig.isConnected) {
       syncUserToSupabase(updatedUser).catch((err) =>
@@ -818,7 +973,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     platform: Platform;
     categoryId: string;
     title: string;
-    description: string;
+    description?: string | null;
     imageUrl: string;
     price?: number | null;
     dealOffer?: string | null;
@@ -833,7 +988,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Your account has been blocked. Please contact support.' };
     }
 
-    const val = validateAffiliateUrl(input.affiliateUrl);
+    const val = validateAffiliateUrl(input.affiliateUrl, allAllowedDomains);
     if (!val.isValid) {
       return { success: false, error: val.error || 'Invalid affiliate URL' };
     }
@@ -854,7 +1009,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       platform: input.platform,
       title: input.title,
       slug,
-      description: input.description,
+      description: input.description || input.title || '',
       imageUrl: input.imageUrl,
       price: input.price ? Number(input.price) : null,
       dealOffer: input.dealOffer || null,
@@ -912,7 +1067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     if (sanitizedUpdates.affiliateUrl) {
-      const val = validateAffiliateUrl(sanitizedUpdates.affiliateUrl);
+      const val = validateAffiliateUrl(sanitizedUpdates.affiliateUrl, allAllowedDomains);
       if (!val.isValid) {
         return { success: false, error: val.error };
       }
@@ -1025,7 +1180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     platform: Platform;
     categoryId: string;
     title: string;
-    description: string;
+    description?: string | null;
     imageUrl: string;
     price?: number | null;
     dealOffer?: string | null;
@@ -1037,7 +1192,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Admin permission required' };
     }
 
-    const val = validateAffiliateUrl(input.affiliateUrl);
+    const val = validateAffiliateUrl(input.affiliateUrl, allAllowedDomains);
     if (!val.isValid) {
       return { success: false, error: val.error };
     }
@@ -1058,7 +1213,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       platform: input.platform,
       title: input.title,
       slug,
-      description: input.description,
+      description: input.description || input.title || '',
       imageUrl: input.imageUrl,
       price: input.price ? Number(input.price) : null,
       dealOffer: input.dealOffer || null,
@@ -1112,7 +1267,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Product not found' };
     }
     if (updates.affiliateUrl) {
-      const val = validateAffiliateUrl(updates.affiliateUrl);
+      const val = validateAffiliateUrl(updates.affiliateUrl, allAllowedDomains);
       if (!val.isValid) {
         return { success: false, error: val.error };
       }
@@ -1214,6 +1369,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
+    if (updates.avatarUrl) {
+      setCachedUserAvatar(updates.avatarUrl, partnerId, updates.email || target.email);
+    }
+
     if (supabaseConfig.isConnected && updatedUser) {
       syncUserToSupabase(updatedUser);
     }
@@ -1243,6 +1402,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       deleteUserFromSupabase(partnerId);
     }
     showToast('Partner removed and listings retained as archived.', 'info');
+  };
+
+  // Affiliate Platform Management (Admin Can Add Any New E-commerce Platforms)
+  const addAffiliatePlatform = (input: {
+    code: string;
+    name: string;
+    domain: string;
+    allowedDomains?: string[];
+    sampleUrl?: string;
+    badgeBg?: string;
+    status?: 'ACTIVE' | 'DISABLED';
+  }) => {
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return { success: false, error: 'Only administrators can create affiliate platforms.' };
+    }
+
+    const cleanCode = input.code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    const cleanName = input.name.trim();
+    const cleanDomain = input.domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+    if (!cleanCode || cleanCode.length < 2) {
+      return { success: false, error: 'Platform Code must be at least 2 characters (e.g. MYNTRA).' };
+    }
+    if (!cleanName) {
+      return { success: false, error: 'Platform Name is required.' };
+    }
+    if (!cleanDomain) {
+      return { success: false, error: 'Platform Domain is required (e.g. myntra.com).' };
+    }
+
+    if (affiliatePlatforms.some((p) => p.code.toUpperCase() === cleanCode || p.id.toUpperCase() === cleanCode)) {
+      return { success: false, error: `Affiliate Platform with code "${cleanCode}" already exists.` };
+    }
+
+    const rawAllowed = input.allowedDomains && input.allowedDomains.length > 0
+      ? input.allowedDomains
+      : [cleanDomain];
+    const cleanAllowedDomains = Array.from(
+      new Set([cleanDomain, ...rawAllowed.map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')).filter(Boolean)])
+    );
+
+    const newPlatform: AffiliatePlatform = {
+      id: cleanCode,
+      code: cleanCode,
+      name: cleanName,
+      domain: cleanDomain,
+      allowedDomains: cleanAllowedDomains,
+      sampleUrl: input.sampleUrl?.trim() || `https://${cleanDomain}/product?aff_id=apnipehchaan`,
+      badgeBg: input.badgeBg || 'text-purple-800 bg-purple-50 border-purple-200',
+      status: input.status || 'ACTIVE',
+      isDefault: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    setAffiliatePlatforms((prev) => [...prev, newPlatform]);
+
+    // Automatically sync domains into platform whitelist
+    setPlatformSettings((prev) => {
+      const merged = Array.from(new Set([...prev.allowedDomains, ...cleanAllowedDomains]));
+      return { ...prev, allowedDomains: merged };
+    });
+
+    if (supabaseConfig.isConnected) {
+      syncAffiliatePlatformToSupabase(newPlatform).then((res) => {
+        if (!res.success && res.code !== '42P01') {
+          console.warn('Supabase platform sync warning:', res.error);
+        }
+      });
+    }
+
+    showToast(`Affiliate Platform "${cleanName}" created successfully!`, 'success');
+    return { success: true };
+  };
+
+  const updateAffiliatePlatform = (id: string, updates: Partial<AffiliatePlatform>) => {
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return { success: false, error: 'Only administrators can modify affiliate platforms.' };
+    }
+
+    let updatedOne: AffiliatePlatform | null = null;
+    setAffiliatePlatforms((prev) =>
+      prev.map((p) => {
+        if (p.id === id || p.code === id) {
+          updatedOne = {
+            ...p,
+            ...updates,
+            id: p.id,
+            code: updates.code ? updates.code.trim().toUpperCase() : p.code,
+            name: updates.name ? updates.name.trim() : p.name,
+            domain: updates.domain ? updates.domain.trim().toLowerCase() : p.domain,
+            allowedDomains: updates.allowedDomains || p.allowedDomains,
+          };
+          return updatedOne;
+        }
+        return p;
+      })
+    );
+
+    if (updates.allowedDomains && updates.allowedDomains.length > 0) {
+      setPlatformSettings((prev) => {
+        const merged = Array.from(new Set([...prev.allowedDomains, ...updates.allowedDomains!]));
+        return { ...prev, allowedDomains: merged };
+      });
+    }
+
+    if (supabaseConfig.isConnected && updatedOne) {
+      syncAffiliatePlatformToSupabase(updatedOne);
+    }
+
+    showToast(`Platform settings updated.`, 'success');
+    return { success: true };
+  };
+
+  const deleteAffiliatePlatform = (id: string) => {
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+      return { success: false, error: 'Only administrators can delete platforms.' };
+    }
+
+    const target = affiliatePlatforms.find((p) => p.id === id || p.code === id);
+    if (!target) return { success: false, error: 'Platform not found.' };
+
+    if (target.isDefault) {
+      return { success: false, error: 'Core default platforms (Amazon, Flipkart, Meesho) cannot be deleted. You can disable them instead.' };
+    }
+
+    setAffiliatePlatforms((prev) => prev.filter((p) => p.id !== id && p.code !== id));
+
+    if (supabaseConfig.isConnected) {
+      deleteAffiliatePlatformFromSupabase(target.code);
+    }
+
+    showToast(`Affiliate Platform "${target.name}" removed.`, 'info');
+    return { success: true };
+  };
+
+  const togglePlatformStatus = (id: string) => {
+    if (!currentUser || currentUser.role !== 'ADMIN') return;
+    setAffiliatePlatforms((prev) =>
+      prev.map((p) => {
+        if (p.id === id || p.code === id) {
+          const nextStatus = p.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
+          const updated = { ...p, status: nextStatus };
+          if (supabaseConfig.isConnected) {
+            syncAffiliatePlatformToSupabase(updated);
+          }
+          showToast(`Platform "${p.name}" is now ${nextStatus === 'ACTIVE' ? 'Active' : 'Disabled'}.`, 'info');
+          return updated;
+        }
+        return p;
+      })
+    );
   };
 
   const updatePlatformSettings = (updates: Partial<PlatformSettings>) => {
@@ -1286,7 +1596,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Security check on affiliate URL
-    const val = validateAffiliateUrl(product.affiliateUrl);
+    const val = validateAffiliateUrl(product.affiliateUrl, allAllowedDomains);
     if (!val.isValid) {
       showToast(`Invalid affiliate link: ${val.error}`, 'error');
       return { success: false, error: val.error };
@@ -1377,6 +1687,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleBlockPartner,
         adminUpdatePartner,
         adminDeletePartner,
+        affiliatePlatforms,
+        activeAffiliatePlatforms,
+        addAffiliatePlatform,
+        updateAffiliatePlatform,
+        deleteAffiliatePlatform,
+        togglePlatformStatus,
         platformSettings,
         updatePlatformSettings,
         exportPlatformDataJson,

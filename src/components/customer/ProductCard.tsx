@@ -24,22 +24,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   compact = false,
   className = ''
 }) => {
-  const { openProductPage } = useApp();
+  const { openProductPage, affiliatePlatforms } = useApp();
 
-  const platformBadge = {
-    AMAZON: {
-      label: 'Amazon',
-      color: 'text-amber-800 bg-amber-50 border-amber-200',
-    },
-    FLIPKART: {
-      label: 'Flipkart',
-      color: 'text-sky-800 bg-sky-50 border-sky-200',
-    },
-    MEESHO: {
-      label: 'Meesho',
-      color: 'text-rose-800 bg-rose-50 border-rose-200',
-    },
-  }[product.platform];
+  const foundPlatform = affiliatePlatforms?.find(
+    (p) => p.code.toUpperCase() === product.platform.toUpperCase() || p.id.toUpperCase() === product.platform.toUpperCase()
+  );
+
+  const platformBadge = foundPlatform
+    ? {
+        label: foundPlatform.name,
+        color: foundPlatform.badgeBg || 'text-purple-800 bg-purple-50 border-purple-200',
+      }
+    : {
+        AMAZON: { label: 'Amazon', color: 'text-amber-800 bg-amber-50 border-amber-200' },
+        FLIPKART: { label: 'Flipkart', color: 'text-sky-800 bg-sky-50 border-sky-200' },
+        MEESHO: { label: 'Meesho', color: 'text-rose-800 bg-rose-50 border-rose-200' },
+      }[product.platform] || {
+        label: product.platform,
+        color: 'text-purple-800 bg-purple-50 border-purple-200',
+      };
 
   return (
     <div className={`group flex flex-col rounded-xl sm:rounded-2xl bg-white border border-slate-200/90 hover:border-slate-300 hover:shadow-md transition-all duration-200 overflow-hidden shadow-xs ${className || 'w-full'}`}>

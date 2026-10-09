@@ -1,6 +1,11 @@
 -- ==============================================================================
--- DealSphere: Affiliate Product Discovery Platform
+-- APNI PEHCHAAN: Affiliate Product Discovery Platform
 -- Complete PostgreSQL / Supabase SQL Editor Script
+-- ==============================================================================
+-- ⚡ QUICK FIX FOR EXISTING SUPABASE DATABASES (Run this if tables already exist):
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+-- ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image_url TEXT;
+-- ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS image_url TEXT;
 -- ==============================================================================
 -- Includes:
 -- 1. Custom ENUM Types
@@ -47,6 +52,7 @@ CREATE TABLE public.users (
   email VARCHAR(191) NOT NULL UNIQUE,
   mobile VARCHAR(20) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  avatar_url TEXT,
   role public.user_role NOT NULL DEFAULT 'PARTNER',
   status public.user_status NOT NULL DEFAULT 'ACTIVE',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

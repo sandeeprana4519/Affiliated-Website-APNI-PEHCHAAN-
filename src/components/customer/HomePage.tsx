@@ -30,7 +30,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onShare, onBuyNow }) => {
     approvedProducts, 
     partners,
     openCategoryPage,
-    setCurrentView 
+    setCurrentView,
+    activeAffiliatePlatforms
   } = useApp();
 
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'ALL'>('ALL');
@@ -434,28 +435,40 @@ export const HomePage: React.FC<HomePageProps> = ({ onShare, onBuyNow }) => {
         {/* Platform segmented buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none max-w-full">
           <span className="text-xs text-slate-500 font-medium mr-1 hidden sm:inline shrink-0">Platform:</span>
-          {(['ALL', 'AMAZON', 'FLIPKART', 'MEESHO'] as const).map((plat) => {
-            const isSelected = selectedPlatform === plat;
-            const activeColor = 
-              plat === 'AMAZON' 
+          {/* 'ALL' button */}
+          <button
+            onClick={() => setSelectedPlatform('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+              selectedPlatform === 'ALL'
+                ? 'bg-slate-900 text-white font-bold shadow-sm'
+                : 'bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
+            }`}
+          >
+            All Platforms
+          </button>
+          {/* Dynamic Active Platforms */}
+          {activeAffiliatePlatforms.map((plat) => {
+            const isSelected = selectedPlatform === plat.code || selectedPlatform === plat.id;
+            const activeColor =
+              plat.code === 'AMAZON'
                 ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                : plat === 'FLIPKART'
+                : plat.code === 'FLIPKART'
                 ? 'bg-sky-500 text-white font-bold shadow-sm'
-                : plat === 'MEESHO'
+                : plat.code === 'MEESHO'
                 ? 'bg-rose-500 text-white font-bold shadow-sm'
-                : 'bg-slate-900 text-white font-bold shadow-sm';
+                : 'bg-purple-600 text-white font-bold shadow-sm';
 
             return (
               <button
-                key={plat}
-                onClick={() => setSelectedPlatform(plat)}
+                key={plat.id || plat.code}
+                onClick={() => setSelectedPlatform(plat.code)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 cursor-pointer whitespace-nowrap ${
                   isSelected
                     ? activeColor
                     : 'bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70'
                 }`}
               >
-                {plat === 'ALL' ? 'All Platforms' : plat === 'AMAZON' ? 'Amazon' : plat === 'FLIPKART' ? 'Flipkart' : 'Meesho'}
+                {plat.name}
               </button>
             );
           })}

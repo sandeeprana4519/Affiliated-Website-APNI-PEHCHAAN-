@@ -1,4 +1,103 @@
-import { User, Category, Product, ClickLog } from '../types';
+import { User, Category, Product, ClickLog, AffiliatePlatform } from '../types';
+
+export const INITIAL_AFFILIATE_PLATFORMS: AffiliatePlatform[] = [
+  {
+    id: 'AMAZON',
+    code: 'AMAZON',
+    name: 'Amazon',
+    domain: 'amazon.in',
+    allowedDomains: ['amazon.in', 'amazon.com', 'amzn.to'],
+    sampleUrl: 'https://www.amazon.in/dp/B0BDK62PDX?tag=apnipehchaan-21',
+    badgeBg: 'text-amber-800 bg-amber-50 border-amber-200',
+    status: 'ACTIVE',
+    isDefault: true,
+    createdAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'FLIPKART',
+    code: 'FLIPKART',
+    name: 'Flipkart',
+    domain: 'flipkart.com',
+    allowedDomains: ['flipkart.com', 'fkrt.it'],
+    sampleUrl: 'https://www.flipkart.com/item/p/itm123?affid=apnipehchaan',
+    badgeBg: 'text-sky-800 bg-sky-50 border-sky-200',
+    status: 'ACTIVE',
+    isDefault: true,
+    createdAt: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 'MEESHO',
+    code: 'MEESHO',
+    name: 'Meesho',
+    domain: 'meesho.com',
+    allowedDomains: ['meesho.com'],
+    sampleUrl: 'https://www.meesho.com/s/p/12345?aff=apnipehchaan',
+    badgeBg: 'text-rose-800 bg-rose-50 border-rose-200',
+    status: 'ACTIVE',
+    isDefault: true,
+    createdAt: '2026-01-01T00:00:00Z',
+  },
+];
+
+// Quick 1-Click presets for Admin to quickly add other popular Indian e-commerce platforms
+export const POPULAR_PLATFORM_PRESETS = [
+  {
+    code: 'MYNTRA',
+    name: 'Myntra',
+    domain: 'myntra.com',
+    allowedDomains: ['myntra.com', 'myntr.it'],
+    sampleUrl: 'https://www.myntra.com/product/123456',
+    badgeBg: 'text-pink-800 bg-pink-50 border-pink-200',
+  },
+  {
+    code: 'AJIO',
+    name: 'Ajio',
+    domain: 'ajio.com',
+    allowedDomains: ['ajio.com'],
+    sampleUrl: 'https://www.ajio.com/p/123456',
+    badgeBg: 'text-teal-800 bg-teal-50 border-teal-200',
+  },
+  {
+    code: 'NYKAA',
+    name: 'Nykaa',
+    domain: 'nykaa.com',
+    allowedDomains: ['nykaa.com'],
+    sampleUrl: 'https://www.nykaa.com/product/p/123456',
+    badgeBg: 'text-rose-800 bg-rose-50 border-rose-200',
+  },
+  {
+    code: 'TATACLIQ',
+    name: 'Tata CLiQ',
+    domain: 'tatacliq.com',
+    allowedDomains: ['tatacliq.com'],
+    sampleUrl: 'https://www.tatacliq.com/p-mp000000',
+    badgeBg: 'text-purple-800 bg-purple-50 border-purple-200',
+  },
+  {
+    code: 'SHOPSY',
+    name: 'Shopsy',
+    domain: 'shopsy.in',
+    allowedDomains: ['shopsy.in'],
+    sampleUrl: 'https://www.shopsy.in/p/12345',
+    badgeBg: 'text-indigo-800 bg-indigo-50 border-indigo-200',
+  },
+  {
+    code: 'CROMA',
+    name: 'Croma',
+    domain: 'croma.com',
+    allowedDomains: ['croma.com'],
+    sampleUrl: 'https://www.croma.com/product/12345',
+    badgeBg: 'text-emerald-800 bg-emerald-50 border-emerald-200',
+  },
+  {
+    code: 'SNAPDEAL',
+    name: 'Snapdeal',
+    domain: 'snapdeal.com',
+    allowedDomains: ['snapdeal.com'],
+    sampleUrl: 'https://www.snapdeal.com/product/12345',
+    badgeBg: 'text-red-800 bg-red-50 border-red-200',
+  },
+];
 
 export const INITIAL_CATEGORIES: Category[] = [
   {

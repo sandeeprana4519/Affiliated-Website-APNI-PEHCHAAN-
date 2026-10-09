@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Platform } from '../../types';
 import { ProductSubmitSchema } from '../../lib/validation/schemas';
+import { compressImage } from '../../lib/imageUtils';
 import { 
   Plus, 
   ArrowLeft, 
@@ -17,17 +18,15 @@ export const AddProductForm: React.FC = () => {
   const { 
     categories, 
     createPartnerProduct, 
-    setCurrentView 
+    setCurrentView,
+    activeAffiliatePlatforms
   } = useApp();
 
   const [platform, setPlatform] = useState<Platform>('AMAZON');
   const [categoryId, setCategoryId] = useState(categories[0]?.id || '');
   const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('https://images.unsplash.com/photo-1546868871-7041f2a55e12?auto=format&fit=crop&w=800&q=80');
-  const [price, setPrice] = useState<string>('2499');
-  const [dealOffer, setDealOffer] = useState('Flat 35% Off');
-  const [dealDetails, setDealDetails] = useState('Special weekend discount on Amazon Prime');
+  const [price, setPrice] = useState<string>('');
   const [affiliateUrl, setAffiliateUrl] = useState('https://www.amazon.in/dp/B0BDK62PDX?tag=mypartnerid-21');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -43,12 +42,12 @@ export const AddProductForm: React.FC = () => {
     const validation = ProductSubmitSchema.safeParse({
       platform,
       categoryId,
-      title,
-      description,
+      title: title.trim(),
+      description: title.trim(),
       imageUrl,
       price: parsedPrice,
-      dealOffer: dealOffer || null,
-      dealDetails: dealDetails || null,
+      dealOffer: null,
+      dealDetails: null,
       affiliateUrl,
     });
 
@@ -65,12 +64,12 @@ export const AddProductForm: React.FC = () => {
     const res = createPartnerProduct({
       platform,
       categoryId,
-      title,
-      description,
+      title: title.trim(),
+      description: title.trim(),
       imageUrl,
       price: parsedPrice,
-      dealOffer: dealOffer || null,
-      dealDetails: dealDetails || null,
+      dealOffer: null,
+      dealDetails: null,
       affiliateUrl,
     });
 
@@ -121,16 +120,33 @@ export const AddProductForm: React.FC = () => {
                 onChange={(e) => {
                   const p = e.target.value as Platform;
                   setPlatform(p);
-                  // Update default affiliate URL placeholder
-                  if (p === 'AMAZON') setAffiliateUrl('https://www.amazon.in/dp/B0BDK62PDX?tag=mypartner-21');
-                  else if (p === 'FLIPKART') setAffiliateUrl('https://www.flipkart.com/item/p/itm123?affid=mypartner');
-                  else setAffiliateUrl('https://www.meesho.com/s/p/12345?aff=mypartner');
+                  // Update default affiliate URL placeholder based on platform
+                  const platObj = activeAffiliatePlatforms?.find((ap) => ap.code === p || ap.id === p);
+                  if (platObj?.sampleUrl) {
+                    setAffiliateUrl(platObj.sampleUrl);
+                  } else if (p === 'AMAZON') {
+                    setAffiliateUrl('https://www.amazon.in/dp/B0BDK62PDX?tag=mypartner-21');
+                  } else if (p === 'FLIPKART') {
+                    setAffiliateUrl('https://www.flipkart.com/item/p/itm123?affid=mypartner');
+                  } else {
+                    setAffiliateUrl('https://www.meesho.com/s/p/12345?aff=mypartner');
+                  }
                 }}
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
               >
-                <option value="AMAZON">Amazon India / Global</option>
-                <option value="FLIPKART">Flipkart</option>
-                <option value="MEESHO">Meesho</option>
+                {activeAffiliatePlatforms && activeAffiliatePlatforms.length > 0 ? (
+                  activeAffiliatePlatforms.map((ap) => (
+                    <option key={ap.id || ap.code} value={ap.code}>
+                      {ap.name} ({ap.domain})
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="AMAZON">Amazon India / Global</option>
+                    <option value="FLIPKART">Flipkart</option>
+                    <option value="MEESHO">Meesho</option>
+                  </>
+                )}
               </select>
               {errors.platform && <p className="text-[11px] text-rose-600 mt-1">{errors.platform}</p>}
             </div>
@@ -164,20 +180,6 @@ export const AddProductForm: React.FC = () => {
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
             />
             {errors.title && <p className="text-[11px] text-rose-600 mt-1">{errors.title}</p>}
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-slate-600 mb-1 font-semibold">Product Description *</label>
-            <textarea
-              rows={3}
-              required
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Key specifications, battery life, material, warranty, and why it's a great value deal..."
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
-            />
-            {errors.description && <p className="text-[11px] text-rose-600 mt-1">{errors.description}</p>}
           </div>
 
           {/* Image URL & File Upload */}
@@ -219,13 +221,19 @@ export const AddProductForm: React.FC = () => {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          if (event.target?.result) {
-                            setImageUrl(event.target.result as string);
-                          }
-                        };
-                        reader.readAsDataURL(file);
+                        compressImage(file, 900, 900, 0.85)
+                          .then((optimized) => {
+                            setImageUrl(optimized);
+                          })
+                          .catch(() => {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              if (event.target?.result) {
+                                setImageUrl(event.target.result as string);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          });
                       }}
                       className="hidden"
                     />
@@ -258,42 +266,18 @@ export const AddProductForm: React.FC = () => {
             {errors.imageUrl && <p className="text-[11px] text-rose-600">{errors.imageUrl}</p>}
           </div>
 
-          {/* Pricing & Deals */}
-          <div className="grid sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-slate-600 mb-1 font-semibold">Price in ₹ (Optional)</label>
-              <input
-                type="number"
-                step="1"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="2499"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
-              />
-              {errors.price && <p className="text-[11px] text-rose-600 mt-1">{errors.price}</p>}
-            </div>
-
-            <div>
-              <label className="block text-slate-600 mb-1 font-semibold">Deal Offer (Optional)</label>
-              <input
-                type="text"
-                value={dealOffer}
-                onChange={(e) => setDealOffer(e.target.value)}
-                placeholder="e.g. Flat 40% Off"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-600 mb-1 font-semibold">Deal Details (Optional)</label>
-              <input
-                type="text"
-                value={dealDetails}
-                onChange={(e) => setDealDetails(e.target.value)}
-                placeholder="e.g. Bank discount of ₹300 on ICICI"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
-              />
-            </div>
+          {/* Price (Optional) */}
+          <div>
+            <label className="block text-slate-600 mb-1 font-semibold">Price in ₹ (Optional)</label>
+            <input
+              type="number"
+              step="1"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="e.g. 2499"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white text-xs"
+            />
+            {errors.price && <p className="text-[11px] text-rose-600 mt-1">{errors.price}</p>}
           </div>
 
           {/* Affiliate URL (CRITICAL VALIDATION) */}

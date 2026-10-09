@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
+import { compressImage } from '../../lib/imageUtils';
 import { 
   Settings, 
   Lock, 
@@ -95,18 +96,20 @@ export const PartnerSettingsModal: React.FC<PartnerSettingsModalProps> = ({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Image size exceeds 5MB limit.', 'error');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      setAvatarUrl(base64);
-      showToast('Profile photo loaded into preview!', 'success');
-    };
-    reader.readAsDataURL(file);
+    compressImage(file, 400, 400, 0.85)
+      .then((optimized) => {
+        setAvatarUrl(optimized);
+        showToast('Profile photo optimized and loaded into preview!', 'success');
+      })
+      .catch(() => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          setAvatarUrl(base64);
+          showToast('Profile photo loaded into preview!', 'success');
+        };
+        reader.readAsDataURL(file);
+      });
   };
 
   const handleGenerateInitialsAvatar = () => {

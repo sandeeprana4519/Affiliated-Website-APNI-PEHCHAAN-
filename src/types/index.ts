@@ -1,8 +1,22 @@
 export type Role = 'CUSTOMER' | 'PARTNER' | 'ADMIN';
 export type UserStatus = 'ACTIVE' | 'BLOCKED';
 export type ProductStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type Platform = 'AMAZON' | 'FLIPKART' | 'MEESHO';
+export type Platform = 'AMAZON' | 'FLIPKART' | 'MEESHO' | string;
 export type CategoryStatus = 'ACTIVE' | 'DISABLED';
+
+export interface AffiliatePlatform {
+  id: string; // e.g. 'AMAZON', 'FLIPKART', 'MEESHO', 'MYNTRA'
+  code: string; // e.g. 'AMAZON', 'MYNTRA'
+  name: string; // e.g. 'Amazon India', 'Myntra'
+  domain: string; // e.g. 'amazon.in', 'myntra.com'
+  allowedDomains: string[]; // e.g. ['myntra.com', 'myntr.it']
+  sampleUrl?: string; // e.g. 'https://www.myntra.com/...'
+  logoUrl?: string;
+  badgeBg?: string; // e.g. 'text-pink-800 bg-pink-50 border-pink-200'
+  status: 'ACTIVE' | 'DISABLED';
+  isDefault?: boolean;
+  createdAt: string;
+}
 
 export interface User {
   id: string;
@@ -109,6 +123,7 @@ export type ViewMode =
   | 'admin_partners'
   | 'admin_products'
   | 'admin_categories'
+  | 'admin_platforms'
   | 'admin_add_product'
   | 'admin_settings'
   | 'system_architecture';
