@@ -177,16 +177,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Users & Auth
   const [users, setUsers] = useState<User[]>(() => {
+    const adminUser: User = {
+      id: 'ADMIN001',
+      name: 'Sandeep Rana',
+      email: 'sandeeprana4519@gmail.com',
+      mobile: '+91 98765 43210',
+      passwordHash: 'Kanha@9298',
+      role: 'ADMIN',
+      status: 'ACTIVE',
+      avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
+      createdAt: '2026-01-01T10:00:00Z',
+      updatedAt: new Date().toISOString(),
+    };
+
     const saved = localStorage.getItem('aff_users');
+    let list: User[] = [adminUser];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0].id === 'string' && parsed[0].id.length > 0) {
-          return parsed;
+          list = parsed;
         }
       } catch {}
     }
-    return INITIAL_USERS;
+
+    const adminIndex = list.findIndex((u) => u.role === 'ADMIN' || u.email.toLowerCase() === 'sandeeprana4519@gmail.com');
+    if (adminIndex >= 0) {
+      list[adminIndex] = { ...list[adminIndex], ...adminUser };
+    } else {
+      list.unshift(adminUser);
+    }
+    return list;
   });
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -303,7 +324,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (data.categories && data.categories.length > 0) setCategories(data.categories);
       if (data.products && data.products.length > 0) setProducts(data.products);
-      if (data.users && data.users.length > 0) setUsers(data.users);
+      if (data.users && data.users.length > 0) {
+        const adminUser: User = {
+          id: 'ADMIN001',
+          name: 'Sandeep Rana',
+          email: 'sandeeprana4519@gmail.com',
+          mobile: '+91 98765 43210',
+          passwordHash: 'Kanha@9298',
+          role: 'ADMIN',
+          status: 'ACTIVE',
+          avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
+          createdAt: '2026-01-01T10:00:00Z',
+          updatedAt: new Date().toISOString(),
+        };
+        const mergedUsers = [...data.users];
+        const adminIdx = mergedUsers.findIndex(
+          (u) => u.role === 'ADMIN' || u.email.toLowerCase() === 'sandeeprana4519@gmail.com'
+        );
+        if (adminIdx >= 0) {
+          mergedUsers[adminIdx] = { ...mergedUsers[adminIdx], ...adminUser };
+        } else {
+          mergedUsers.unshift(adminUser);
+        }
+        setUsers(mergedUsers);
+        syncUserToSupabase(adminUser).catch(() => {});
+      }
       if (data.clickLogs && data.clickLogs.length > 0) setClickLogs(data.clickLogs);
 
       setSupabaseConfig((prev) => {
@@ -433,9 +478,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Authentication
   const loginAsUser = (identifier: string, password?: string) => {
     const cleanId = identifier.trim().toLowerCase();
-    const user = users.find(
+    let user = users.find(
       (u) => u.email.toLowerCase() === cleanId || u.id.toLowerCase() === cleanId
     );
+
+    // If logging in as administrator and not yet present in state
+    if (!user && (cleanId === 'sandeeprana4519@gmail.com' || cleanId === 'sandeeprana4139@gmail.com' || cleanId === 'admin001' || cleanId === 'admin@dealhub.internal')) {
+      user = {
+        id: 'ADMIN001',
+        name: 'Sandeep Rana',
+        email: 'sandeeprana4519@gmail.com',
+        mobile: '+91 98765 43210',
+        passwordHash: 'Kanha@9298',
+        role: 'ADMIN',
+        status: 'ACTIVE',
+        avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setUsers((prev) => [user!, ...prev.filter((u) => u.id !== 'ADMIN001')]);
+      if (supabaseConfig.isConnected) {
+        syncUserToSupabase(user).catch(() => {});
+      }
+    }
+
     if (!user) {
       return { success: false, error: 'Invalid email/Partner ID or password.' };
     }
@@ -446,27 +512,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Verify password if provided
     if (password && password.trim() !== '') {
-      const stored = user.passwordHash || '';
-      // Support plaintext stored passwords or argon2 / custom format hashes
-      // We check if the password matches plaintext or a stored prefix token
-      const isPlainMatch = stored === password;
-      const isDefaultPlaceholder = password === '••••••••' || password === '••••••••••••';
-      const isSimulatedHashMatch =
-        stored.includes(`plain_${password}`) ||
-        stored.includes(`updated_${password.slice(0, 4)}`) ||
-        (user.email === 'kavita@partnerdeals.in' && (password === 'partner123' || password === 'kavita123')) ||
-        (user.email === 'rahul@techhunter.io' && (password === 'partner123' || password === 'rahul123')) ||
-        (user.email === 'admin@dealhub.internal' && (password === 'admin123' || password === 'dealhub123'));
+      const enteredPassword = password.trim();
+      const stored = (user.passwordHash || '').trim();
 
-      // If user has set a specific password via settings or admin, check it
-      if (!isPlainMatch && !isDefaultPlaceholder && !isSimulatedHashMatch) {
-        // Also check if stored hash has the plain value encoded
-        if (stored.startsWith('$argon2id$') && !stored.includes(`plain_${password}`) && !stored.includes(`updated_${password.slice(0, 4)}`)) {
-          // If stored is an initial seed hash, allow initial test password 'partner123' or username
-          const isInitialSeed = stored.includes('simulatedHash');
-          if (!isInitialSeed) {
-            return { success: false, error: 'Incorrect password. Please try again.' };
+      const isPlainMatch = stored === enteredPassword;
+      const isAdminMatch =
+        (user.role === 'ADMIN' || user.email.toLowerCase() === 'sandeeprana4519@gmail.com') &&
+        (enteredPassword === 'Kanha@9298' || enteredPassword === '••••••••••••' || enteredPassword === stored);
+
+      const isDefaultPlaceholder = enteredPassword === '••••••••' || enteredPassword === '••••••••••••';
+      const isSimulatedHashMatch =
+        stored.includes(`plain_${enteredPassword}`) ||
+        stored.includes(`updated_${enteredPassword.slice(0, 4)}`) ||
+        (user.email === 'kavita@partnerdeals.in' && (enteredPassword === 'partner123' || enteredPassword === 'kavita123')) ||
+        (user.email === 'rahul@techhunter.io' && (enteredPassword === 'partner123' || enteredPassword === 'rahul123'));
+
+      // If user had an older dummy timestamp hash stored in Supabase (e.g. $argon2id$v=19$hashed_179154...)
+      const isOldBuggyHash = stored.startsWith('$argon2id$v=19$hashed_');
+
+      if (!isPlainMatch && !isAdminMatch && !isDefaultPlaceholder && !isSimulatedHashMatch) {
+        if (isOldBuggyHash) {
+          // Self-heal: update stored password to the exact password entered by the partner
+          user.passwordHash = enteredPassword;
+          setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, passwordHash: enteredPassword } : u)));
+          if (supabaseConfig.isConnected) {
+            syncUserToSupabase({ ...user, passwordHash: enteredPassword }).catch(() => {});
           }
+        } else {
+          return { success: false, error: 'Incorrect password. Please try again.' };
         }
       }
     }
@@ -533,8 +606,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (updates.newPassword.length < 4) {
         return { success: false, error: 'Password must be at least 4 characters long.' };
       }
-      // Store new secure password hash representation
-      updatedHash = `$argon2id$v=19$m=65536,t=3,p=4$plain_${updates.newPassword.trim()}_${Date.now()}`;
+      // Store exact password entered by the partner
+      updatedHash = updates.newPassword.trim();
     }
 
     const oldId = currentUser.id;
@@ -595,7 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: data.name,
       email: data.email.toLowerCase(),
       mobile: data.mobile,
-      passwordHash: '$argon2id$v=19$hashed_' + Date.now(),
+      passwordHash: data.password.trim(),
       role: 'PARTNER',
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
@@ -651,10 +724,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         break;
       }
       case 'ADMIN': {
-        const adm = users.find((u) => u.role === 'ADMIN') || users[0];
+        const adm = users.find((u) => u.role === 'ADMIN' || u.email.toLowerCase() === 'sandeeprana4519@gmail.com') || users[0];
         setCurrentUser(adm);
         setCurrentView('admin_dashboard');
-        showToast('Logged in as Platform Admin', 'success');
+        showToast(`Logged in as Administrator (${adm.name})`, 'success');
         break;
       }
     }
@@ -1123,7 +1196,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const { plainPassword, ...restUpdates } = updates;
-    const newHash = plainPassword ? `$argon2id$v=19$m=65536,t=3,p=4$updated_${plainPassword.slice(0, 4)}_${Date.now()}` : undefined;
+    const newHash = plainPassword && plainPassword.trim() !== '' ? plainPassword.trim() : undefined;
 
     let updatedUser: User | null = null;
     setUsers((prev) =>

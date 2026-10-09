@@ -86,10 +86,10 @@ export const INITIAL_CATEGORIES: Category[] = [
 export const INITIAL_USERS: User[] = [
   {
     id: 'ADMIN001',
-    name: 'Platform Administrator',
-    email: 'admin@dealhub.internal',
+    name: 'Sandeep Rana',
+    email: 'sandeeprana4519@gmail.com',
     mobile: '+91 98765 43210',
-    passwordHash: '$argon2id$v=19$m=65536,t=3,p=4$simulatedHashAdminSecret',
+    passwordHash: 'Kanha@9298',
     role: 'ADMIN',
     status: 'ACTIVE',
     avatarUrl: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=300&q=80',

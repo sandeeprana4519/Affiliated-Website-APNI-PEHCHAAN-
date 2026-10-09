@@ -1,6 +1,6 @@
 {
-  "name": "NexusStack - Next.js MySQL VPS Architecture Hub",
-  "description": "Production full-stack commerce platform with Customer Storefront, Next.js API, MySQL Studio, JWT/Session RBAC Auth, Partner & Admin Portals, and Hostinger VPS deployment suite.",
+  "name": "APNI PEHCHAAN - Curated Deals & Products",
+  "description": "APNI PEHCHAAN - Discover curated deals, trending discounts, and verified products across Amazon, Flipkart, and Meesho.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

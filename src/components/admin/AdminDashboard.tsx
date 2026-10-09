@@ -2330,16 +2330,16 @@ CREATE POLICY "Public full access to click_logs"
                 </div>
               </div>
 
-              {/* Password Hash with Reveal/Hide */}
+              {/* Partner Password with Reveal/Hide */}
               <div className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-zinc-500 text-[10px] font-mono">ENCRYPTED CREDENTIAL / HASH (Argon2id)</span>
+                  <span className="text-zinc-500 text-[10px] font-mono">PARTNER LOGIN PASSWORD</span>
                   <button
                     onClick={() => setShowPasswordHash(!showPasswordHash)}
                     className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
                   >
                     {showPasswordHash ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                    <span>{showPasswordHash ? 'Hide Hash' : 'Show Hash'}</span>
+                    <span>{showPasswordHash ? 'Hide Password' : 'Show Password'}</span>
                   </button>
                 </div>
                 <div className="flex items-center justify-between gap-2 bg-zinc-900 p-2 rounded border border-zinc-850">
@@ -2347,9 +2347,9 @@ CREATE POLICY "Public full access to click_logs"
                     {showPasswordHash ? selectedPartnerDetails.passwordHash : '••••••••••••••••••••••••••••••••••••••••'}
                   </span>
                   <button
-                    onClick={() => copyToClipboard(selectedPartnerDetails.passwordHash, 'Password Hash')}
+                    onClick={() => copyToClipboard(selectedPartnerDetails.passwordHash, 'Partner Password')}
                     className="p-1 text-zinc-400 hover:text-white cursor-pointer"
-                    title="Copy Hash"
+                    title="Copy Password"
                   >
                     <Copy className="w-3.5 h-3.5" />
                   </button>

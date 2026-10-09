@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Shield, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { Shield, Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export const AdminLogin: React.FC = () => {
   const { loginAsUser, setCurrentView } = useApp();
-  const [email, setEmail] = useState('admin@dealhub.internal');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    const res = loginAsUser(email, password);
+    const res = loginAsUser(email.trim(), password);
     if (!res.success) {
       setErrorMessage(res.error || 'Admin credentials incorrect.');
     }
@@ -48,6 +49,8 @@ export const AdminLogin: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter administrator email"
+                autoComplete="username"
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-purple-500 focus:bg-white text-xs"
               />
             </div>
@@ -58,12 +61,22 @@ export const AdminLogin: React.FC = () => {
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-purple-500 focus:bg-white text-xs"
+                placeholder="Enter master password"
+                autoComplete="current-password"
+                className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:border-purple-500 focus:bg-white text-xs"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
